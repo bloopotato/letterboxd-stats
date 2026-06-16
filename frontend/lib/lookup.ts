@@ -1,7 +1,8 @@
 import 'server-only';
 
 import { createClient } from '@supabase/supabase-js';
-import type { LetterboxdLookupEntry } from '@/utils/data/types';
+
+import { BulkMovieLookupResult, BulkMovieLookupRow, MovieLookup } from '@/types/database';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -15,7 +16,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE);
 /**
  * Bulk search movies in supabase
  */
-export async function bulkSearchMovies(entries: LetterboxdLookupEntry[]) {
+export async function bulkSearchMovies(entries: MovieLookup[]): Promise<BulkMovieLookupRow[]> {
   const { data, error } = await supabase.rpc('search_movies_bulk', {
     entries: entries.map((e) => ({
       title: e.title,
@@ -26,11 +27,7 @@ export async function bulkSearchMovies(entries: LetterboxdLookupEntry[]) {
   if (error) {
     throw new Error(`RPC search_movies_bulk failed: ${error.message}`);
   }
+  console.log('RPC search_movies_bulk result:', data);
 
-  return data as Array<{
-    input_title: string;
-    id: number;
-    title: string;
-    release_date: string;
-  }>;
+  return data as BulkMovieLookupRow[];
 }

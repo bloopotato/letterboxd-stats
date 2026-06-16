@@ -1,31 +1,4 @@
-export interface LetterboxdDiaryEntry {
-  Date: string;
-  Name: string;
-  Year: number;
-  'Letterboxd URI': string;
-  Rating: number | null;
-  Rewatch: string | null;
-  Tags: string | null;
-  'Watched Date': string | null;
-}
-
-export interface LetterboxdWatchlistEntry {
-  Date: string;
-  Name: string;
-  Year: number;
-  'Letterboxd URI': string;
-}
-
-export interface LetterboxdLookupEntry {
-  title: string;
-  year?: number;
-  letterboxdUri?: string;
-  _source?: 'diary' | 'watchlist';
-  rating?: number | null;
-  rewatch?: boolean;
-  tags?: string | null;
-  watchedDate?: string | null;
-}
+import { LetterboxdLookupEntryTemp } from '@/types/letterboxd';
 
 export interface TMDBGenre {
   id: number;
@@ -57,7 +30,30 @@ export interface TMDBSpokenLanguage {
   name: string;
 }
 
-export interface TMDBSearchMovie {
+export interface TMDBCastMember {
+  id: number;
+  character: string | null;
+  known_for_department?: string | null;
+  name: string;
+  order: number | null;
+  profile_path: string | null;
+}
+
+export interface TMDBCrewMember {
+  id: number;
+  department: string | null;
+  job: string | null;
+  name: string;
+  order: number | null;
+  profile_path: string | null;
+}
+
+export interface TMDBCredits {
+  cast: TMDBCastMember[];
+  crew: TMDBCrewMember[];
+}
+
+export interface MovieData {
   adult: boolean;
   backdrop_path: string | null;
   genre_ids: number[];
@@ -77,7 +73,7 @@ export interface TMDBSearchMovie {
 
 export interface TMDBSearchResponse {
   page: number;
-  results: TMDBSearchMovie[];
+  results: MovieData[];
   total_pages: number;
   total_results: number;
 }
@@ -99,6 +95,7 @@ export interface TMDBMovieDetails {
   production_countries: TMDBProductionCountry[];
   release_date: string | null;
   runtime: number | null;
+  credits?: TMDBCredits;
   spoken_languages: TMDBSpokenLanguage[];
   status: string;
   tagline: string | null;
@@ -108,7 +105,7 @@ export interface TMDBMovieDetails {
   vote_count: number;
 }
 
-export interface EnrichedLookupEntry extends LetterboxdLookupEntry {
+export interface EnrichedLookupEntry extends LetterboxdLookupEntryTemp {
   tmdbCached?: boolean;
   tmdbId?: number | null;
   tmdb?: TMDBMovieDetails | null;
@@ -159,10 +156,39 @@ export interface OverviewTopItem {
   count: number;
 }
 
+export interface CastTopItem {
+  id: number;
+  name: string;
+  count: number;
+}
+
+export interface TMDBPersonRow {
+  id: number;
+  name: string;
+  profile_path: string | null;
+  known_for_department?: string | null;
+  popularity?: number | null;
+}
+
+export interface TMDBCreditRow {
+  movie_id: number;
+  person_id: number;
+  department: string | null;
+  job: string | null;
+  character: string | null;
+  cast_order: number | null;
+}
+
 export interface OverviewStats {
   watchedCount: number;
   averageRating: number | null;
   averageRuntime: number | null;
   topGenres: OverviewTopItem[];
   topLanguages: OverviewTopItem[];
+}
+
+export interface CastStats {
+  watchedCount: number;
+  topCast: CastTopItem[];
+  topDirectors: CastTopItem[];
 }

@@ -1,10 +1,33 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import type { EnrichedLookupEntry, OverviewStats } from '@/utils/data/types';
+import Image from 'next/image';
+import { useMemo } from 'react';
+import type { EnrichedLetterboxdFilm } from '@/types/letterboxd';
 
 type OverviewSectionProps = {
-  importedItems: EnrichedLookupEntry[] | null;
+  importedItems: EnrichedLetterboxdFilm[] | null;
+};
+
+type RankedItem = {
+  name: string;
+  count: number;
+};
+
+type RecentDiaryEntry = {
+  item: EnrichedLetterboxdFilm;
+  index: number;
+};
+
+type OverviewData = {
+  importedCount: number;
+  diaryCount: number;
+  ratedCount: number;
+  tmdbMatchedCount: number;
+  averageRating: number | null;
+  averageRuntime: number | null;
+  topGenres: RankedItem[];
+  topLanguages: RankedItem[];
+  recentDiary: EnrichedLetterboxdFilm[];
 };
 
 function StatCard({ label, value }: { label: string; value: string }) {
@@ -16,98 +39,144 @@ function StatCard({ label, value }: { label: string; value: string }) {
   );
 }
 
+function formatRating(value: number | null) {
+  return value == null ? '—' : value.toFixed(2);
+}
+
+function formatRuntime(value: number | null) {
+  return value == null ? '—' : `${Math.round(value)} min`;
+}
+
+function getPosterUrl(item: EnrichedLetterboxdFilm) {
+  const posterPath = item.tmdb?.poster_path ?? item.film?.poster_path;
+
+  return posterPath ? `https://image.tmdb.org/t/p/original${posterPath}` : null;
+}
+
+function parseDateScore(value?: string | null) {
+  if (!value) return Number.NEGATIVE_INFINITY;
+
+  const timestamp = Date.parse(value);
+  return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp;
+}
+
+function getRecentDate(item: EnrichedLetterboxdFilm) {
+  return item.watchedDate ?? item.diaryDate ?? null;
+}
+
+function buildOverviewData(items: EnrichedLetterboxdFilm[]): OverviewData {
+  const genreCounts = new Map<string, number>();
+  const languageCounts = new Map<string, number>();
+  const recentDiary: RecentDiaryEntry[] = [];
+
+  let diaryCount = 0;
+  let ratedCount = 0;
+  let tmdbMatchedCount = 0;
+  let ratingSum = 0;
+  let runtimeSum = 0;
+  let runtimeCount = 0;
+
+  items.forEach((item, index) => {
+    if (item.source === 'diary') {
+      diaryCount += 1;
+      recentDiary.push({ item, index });
+    }
+
+    if (typeof item.rating === 'number') {
+      ratedCount += 1;
+      ratingSum += item.rating;
+    }
+
+    const runtime = item.tmdb?.runtime;
+    if (typeof runtime === 'number') {
+      runtimeSum += runtime;
+      runtimeCount += 1;
+    }
+
+    if (item.tmdb || item.film) {
+      tmdbMatchedCount += 1;
+    }
+
+    for (const genre of item.tmdb?.genres ?? []) {
+      genreCounts.set(genre.name, (genreCounts.get(genre.name) ?? 0) + 1);
+    }
+
+    for (const language of item.tmdb?.spoken_languages ?? []) {
+      const name = language.english_name || language.name;
+      languageCounts.set(name, (languageCounts.get(name) ?? 0) + 1);
+    }
+  });
+
+  recentDiary.sort((left, right) => {
+    const dateDelta = parseDateScore(getRecentDate(right.item)) - parseDateScore(getRecentDate(left.item));
+    if (dateDelta !== 0) return dateDelta;
+    return right.index - left.index;
+  });
+
+  const topGenres = Array.from(genreCounts.entries())
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 5)
+    .map(([name, count]) => ({ name, count }));
+
+  const topLanguages = Array.from(languageCounts.entries())
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 5)
+    .map(([name, count]) => ({ name, count }));
+
+  return {
+    importedCount: items.length,
+    diaryCount,
+    ratedCount,
+    tmdbMatchedCount,
+    averageRating: ratedCount ? ratingSum / ratedCount : null,
+    averageRuntime: runtimeCount ? runtimeSum / runtimeCount : null,
+    topGenres,
+    topLanguages,
+    recentDiary: recentDiary.slice(0, 4).map(({ item }) => item),
+  };
+}
+
 export default function OverviewSection({ importedItems }: OverviewSectionProps) {
-  const [stats, setStats] = useState<OverviewStats | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const items = useMemo(() => importedItems ?? [], [importedItems]);
-  const hasItems = items.length > 0;
-
-  useEffect(() => {
-    if (!hasItems) {
-      return;
-    }
-
-    let cancelled = false;
-
-    async function loadOverview() {
-      setLoading(true);
-      setError(null);
-
-      try {
-        const response = await fetch('/api/overview', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            items: items.map((item) => ({
-              rating: item.rating ?? null,
-              tmdbId: item.tmdbId ?? item.tmdb?.id ?? null,
-            })),
-          }),
-          cache: 'no-store',
-        });
-
-        const json = (await response.json()) as {
-          ok: boolean;
-          stats?: OverviewStats;
-          error?: string;
-        };
-
-        if (!response.ok || !json.ok || !json.stats) {
-          throw new Error(json.error || 'Unable to load overview');
-        }
-
-        if (!cancelled) setStats(json.stats);
-      } catch (fetchError) {
-        if (!cancelled) {
-          setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    void loadOverview();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [hasItems, items]);
-
-  const averageRating = stats?.averageRating == null ? '—' : stats.averageRating.toFixed(2);
-  const averageRuntime =
-    stats?.averageRuntime == null ? '—' : `${Math.round(stats.averageRuntime)} min`;
-  const visibleStats = hasItems ? stats : null;
+  const overview = useMemo(() => buildOverviewData(items), [items]);
+  const hasItems = overview.importedCount > 0;
 
   return (
-    <section className="rounded-[2rem] border border-border/70 bg-[linear-gradient(180deg,_rgba(255,255,255,0.9),_rgba(247,242,233,0.92))] p-5 shadow-sm">
+    <section className="rounded-4xl border border-border/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.9),rgba(247,242,233,0.92))] p-5 shadow-sm">
       <div className="flex items-center justify-between gap-4">
         <div>
           <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Overview</p>
           <h2 className="mt-1 text-xl font-semibold tracking-tight text-slate-900">Your stats</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Derived from the enriched films you just imported.
+          </p>
         </div>
-        {loading && <p className="text-sm text-slate-500">Refreshing…</p>}
       </div>
 
-      {error && (
-        <p className="mt-4 rounded-2xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
-      )}
-
-      {!loading && !error && visibleStats && (
+      {hasItems && (
         <div className="mt-5 space-y-5">
           <div className="grid gap-3 sm:grid-cols-2">
-            <StatCard label="Watched" value={String(visibleStats.watchedCount)} />
-            <StatCard label="Average rating" value={averageRating} />
-            <StatCard label="Average runtime" value={averageRuntime} />
-            <StatCard label="Top genre" value={visibleStats.topGenres[0]?.name ?? '—'} />
+            <StatCard label="Imported" value={String(overview.importedCount)} />
+            <StatCard label="Diary entries" value={String(overview.diaryCount)} />
+            <StatCard label="Rated entries" value={String(overview.ratedCount)} />
+            <StatCard label="Average rating" value={formatRating(overview.averageRating)} />
+          </div>
+
+          <div className="flex flex-wrap gap-2 text-xs text-slate-500">
+            <span className="rounded-full border border-border/70 bg-white/70 px-3 py-1">
+              TMDB matches {overview.tmdbMatchedCount}
+            </span>
+            <span className="rounded-full border border-border/70 bg-white/70 px-3 py-1">
+              Average runtime {formatRuntime(overview.averageRuntime)}
+            </span>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="rounded-3xl border border-border/70 bg-white/80 p-4 shadow-sm">
               <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Top genres</p>
               <div className="mt-3 space-y-2">
-                {visibleStats.topGenres.length ? (
-                  visibleStats.topGenres.map((item, index) => (
+                {overview.topGenres.length ? (
+                  overview.topGenres.map((item, index) => (
                     <div
                       key={`${item.name}-${index}`}
                       className="flex items-center justify-between gap-3"
@@ -125,8 +194,8 @@ export default function OverviewSection({ importedItems }: OverviewSectionProps)
             <div className="rounded-3xl border border-border/70 bg-white/80 p-4 shadow-sm">
               <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Top languages</p>
               <div className="mt-3 space-y-2">
-                {visibleStats.topLanguages.length ? (
-                  visibleStats.topLanguages.map((item, index) => (
+                {overview.topLanguages.length ? (
+                  overview.topLanguages.map((item, index) => (
                     <div
                       key={`${item.name}-${index}`}
                       className="flex items-center justify-between gap-3"
@@ -141,10 +210,107 @@ export default function OverviewSection({ importedItems }: OverviewSectionProps)
               </div>
             </div>
           </div>
+
+          <div>
+            <div className="flex items-end justify-between gap-4">
+              <div>
+                <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Recent diary</p>
+                <h3 className="mt-1 text-lg font-semibold tracking-tight text-slate-900">
+                  Latest 4 entries
+                </h3>
+              </div>
+            </div>
+
+            {overview.recentDiary.length ? (
+              <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                {overview.recentDiary.map((item) => {
+                  const posterUrl = getPosterUrl(item);
+                  const linkHref = item.letterboxdUri;
+                  const releaseYear = item.year ?? item.film?.release_date?.slice(0, 4) ?? '—';
+                  const rating = item.rating == null ? 'No rating' : `${item.rating.toFixed(1)}/5`;
+                  const recentDate = getRecentDate(item);
+                  const watchedDate = recentDate
+                    ? new Date(recentDate).toLocaleDateString(undefined, {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                      })
+                    : 'Recent diary entry';
+
+                  const card = (
+                    <div className="group overflow-hidden rounded-[1.6rem] border border-border/70 bg-white/85 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
+                      <div className="relative aspect-2/3 bg-slate-100">
+                        {posterUrl ? (
+                          <Image
+                            src={posterUrl}
+                            alt={`${item.title} poster`}
+                            fill
+                            sizes="(max-width: 1280px) 50vw, 25vw"
+                            className="object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center bg-[linear-gradient(180deg,rgba(23,23,23,0.9),rgba(71,85,105,0.85))] px-4 text-center">
+                            <p className="text-sm font-medium text-white/85">No poster available</p>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="space-y-2 p-4">
+                        <div>
+                          <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">
+                            {watchedDate}
+                          </p>
+                          <h4 className="mt-1 line-clamp-2 text-base font-semibold tracking-tight text-slate-900">
+                            {item.title}
+                          </h4>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2 text-xs text-slate-600">
+                          <span className="rounded-full bg-slate-100 px-2.5 py-1">
+                            {releaseYear}
+                          </span>
+                          <span className="rounded-full bg-slate-100 px-2.5 py-1">{rating}</span>
+                          {item.rewatch && (
+                            <span className="rounded-full bg-amber-100 px-2.5 py-1 text-amber-900">
+                              Rewatch
+                            </span>
+                          )}
+                        </div>
+
+                        <p className="text-xs text-slate-500">
+                          Click to open this entry on Letterboxd.
+                        </p>
+                      </div>
+                    </div>
+                  );
+
+                  if (!linkHref) {
+                    return <div key={`${item.title}-${watchedDate}`}>{card}</div>;
+                  }
+
+                  return (
+                    <a
+                      key={`${item.title}-${watchedDate}`}
+                      href={linkHref}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block"
+                      aria-label={`Open ${item.title} on Letterboxd`}
+                    >
+                      {card}
+                    </a>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="mt-4 text-sm text-slate-500">No diary entries yet.</p>
+            )}
+          </div>
         </div>
       )}
 
-      {!loading && !error && !visibleStats && (
+      {!hasItems && (
         <p className="mt-4 text-sm text-slate-500">Import a ZIP export to populate the overview.</p>
       )}
     </section>

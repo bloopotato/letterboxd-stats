@@ -3,15 +3,15 @@
 import { useState } from 'react';
 import { parseLetterboxdZip } from '@/utils/data/parseZip';
 import normalise from '@/utils/data/normalise';
-import type { EnrichedLookupEntry, LetterboxdLookupEntry } from '@/utils/data/types';
+import { EnrichedLetterboxdFilm, LetterboxdFilm } from '@/types/letterboxd';
 
 type UploadSectionProps = {
-  onImported?: (results: EnrichedLookupEntry[]) => void;
+  onImported?: (results: EnrichedLetterboxdFilm[]) => void;
 };
 
 export default function UploadSection({ onImported }: UploadSectionProps) {
   const [loading, setLoading] = useState(false);
-  const [enriched, setEnriched] = useState<EnrichedLookupEntry[] | null>(null);
+  const [enriched, setEnriched] = useState<EnrichedLetterboxdFilm[] | null>(null);
   const [progress, setProgress] = useState(0);
   const [etaSeconds, setEtaSeconds] = useState<number | null>(null);
 
@@ -31,10 +31,13 @@ export default function UploadSection({ onImported }: UploadSectionProps) {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    event.target.value = '';
+
     let progressTimer: number | null = null;
 
     try {
       setLoading(true);
+      setEnriched(null);
 
       // (1) Parse the ZIP file and extract diary/watchlist entries
       const parsedData = await parseLetterboxdZip(file);
@@ -42,7 +45,7 @@ export default function UploadSection({ onImported }: UploadSectionProps) {
       // (2) Normalise and merge the entries into a single list of lookup items
       const diaryFilms = normalise.normaliseFromDiary(parsedData.diary);
       const watchlistFilms = normalise.normaliseFromWatchlist(parsedData.watchlist);
-      const items: LetterboxdLookupEntry[] = normalise.mergeCollections(diaryFilms, watchlistFilms);
+      const items: LetterboxdFilm[] = normalise.mergeCollections(diaryFilms, watchlistFilms);
       const estimatedTotalMs = estimateDurationMs(items.length);
       const startedAt = Date.now();
 
@@ -57,7 +60,7 @@ export default function UploadSection({ onImported }: UploadSectionProps) {
         setEtaSeconds(Math.max(1, Math.ceil(remainingMs / 1000)));
       }, 250);
 
-      // (3) Bulk lookup in supabase
+      // (3) Lookup in supabase
       const res = await fetch('/api/lookup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -72,7 +75,7 @@ export default function UploadSection({ onImported }: UploadSectionProps) {
       setProgress(100);
       setEtaSeconds(0);
 
-      const results: EnrichedLookupEntry[] = json.results;
+      const results: EnrichedLetterboxdFilm[] = json.results;
       setEnriched(results);
       onImported?.(results);
     } catch (error) {

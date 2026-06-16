@@ -1,12 +1,12 @@
 import JSZip from 'jszip';
 import Papa from 'papaparse';
-import type { LetterboxdDiaryEntry, LetterboxdWatchlistEntry } from './types';
+import { LetterboxdDiaryCsvRow, LetterboxdWatchlistCsvRow } from '@/types/letterboxd';
 
 const REQUIRED_FILES = ['diary.csv', 'watchlist.csv'] as const;
 
 export type ParsedZipResult = {
-  diary: LetterboxdDiaryEntry[];
-  watchlist: LetterboxdWatchlistEntry[];
+  diary: LetterboxdDiaryCsvRow[];
+  watchlist: LetterboxdWatchlistCsvRow[];
 };
 
 function parseNumber(value: unknown): number | null {
@@ -18,8 +18,8 @@ function parseNumber(value: unknown): number | null {
 export async function parseLetterboxdZip(file: File): Promise<ParsedZipResult> {
   const zip = await JSZip.loadAsync(file);
 
-  const diary: LetterboxdDiaryEntry[] = [];
-  const watchlist: LetterboxdWatchlistEntry[] = [];
+  const diary: LetterboxdDiaryCsvRow[] = [];
+  const watchlist: LetterboxdWatchlistCsvRow[] = [];
   const requiredFileSet = new Set<string>(REQUIRED_FILES as readonly string[]);
 
   console.log('Files in ZIP:', Object.keys(zip.files));

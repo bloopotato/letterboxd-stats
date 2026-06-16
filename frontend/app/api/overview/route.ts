@@ -1,16 +1,16 @@
 import { NextResponse } from 'next/server';
 import type {
-  LetterboxdLookupEntry,
   OverviewStats,
   TMDBGenreRow,
   TMDBLanguageRow,
   TMDBMovieRow,
 } from '@/utils/data/types';
+import {LetterboxdLookupEntryTemp} from "@/types/letterboxd";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-type OverviewInputItem = Pick<LetterboxdLookupEntry, 'rating'> & {
+type OverviewInputItem = Pick<LetterboxdLookupEntryTemp, 'rating'> & {
   tmdbId?: number | null;
 };
 
