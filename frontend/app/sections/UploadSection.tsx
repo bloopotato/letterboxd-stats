@@ -9,6 +9,12 @@ type UploadSectionProps = {
   onImported?: (results: EnrichedLetterboxdFilm[]) => void;
 };
 
+const INSTRUCTIONS = [
+  "On Letterboxd, go to Settings → Data → Export Your Data",
+  "Download the ZIP file",
+  "Upload the ZIP file below to see your stats",
+]
+
 export default function UploadSection({ onImported }: UploadSectionProps) {
   const [loading, setLoading] = useState(false);
   const [enriched, setEnriched] = useState<EnrichedLetterboxdFilm[] | null>(null);
@@ -91,19 +97,50 @@ export default function UploadSection({ onImported }: UploadSectionProps) {
   }
 
   return (
-    <section className="mx-auto mt-16 w-full max-w-2xl px-4 sm:px-0">
-      <div className="mb-6 text-center">
-        <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+    <section className="flex flex-col w-full gap-4">
+      {/* Header */}
+      <div className="">
+        <h2 className="text-4xl font-semibold tracking-tight">
           Upload your Letterboxd export
         </h2>
-        <p className="mt-2 text-sm text-secondary/80">
+        <p className="mt-2 text-sm text-primary/80">
           Choose the Letterboxd .zip export and we&apos;ll handle the stats.
         </p>
       </div>
 
+      {/* Instructions */}
+      <div className="flex justify-between gap-6 items-center">
+        {INSTRUCTIONS.map((instruction, i) => (
+          <div
+            key={i}
+            className="
+              flex items-start gap-3
+              rounded-3xl
+              px-6 py-4
+              border border-border/30
+              bg-card/30
+              transition-all duration-300 ease-out
+              hover:-translate-y-1
+              hover:scale-[1.01]
+              hover:bg-tertiary/5
+              hover:border-tertiary/30
+            "
+          >
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-secondary/20 text-md font-semibold text-secondary">
+              {i + 1}
+            </div>
+
+            <p className="text-md text-secondary">
+              {instruction}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      {/* Zip Upload */}
       <label
         htmlFor="letterboxd-upload"
-        className="group flex cursor-pointer flex-col items-center justify-center rounded-4xl border border-border/80 bg-white/80 p-8 text-center shadow-sm transition-all duration-300 ease-out hover:-translate-y-1 hover:scale-[1.01] hover:border-secondary/50 hover:bg-secondary/5 hover:shadow-xl dark:bg-card/90"
+        className="group flex cursor-pointer flex-col items-center justify-center rounded-4xl border border-border/80 bg-foreground/80 p-8 text-center shadow-sm transition-all duration-300 ease-out hover:-translate-y-1 hover:scale-[1.01] hover:border-tertiary/50 hover:bg-tertiary/5 hover:shadow-xl dark:bg-card/90"
       >
         <input
           id="letterboxd-upload"
@@ -113,21 +150,22 @@ export default function UploadSection({ onImported }: UploadSectionProps) {
           onChange={handleFileUpload}
         />
 
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-secondary/10 text-sm font-semibold tracking-[0.2em] text-secondary transition-all duration-300 group-hover:scale-110 group-hover:bg-secondary/20">
+        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-tertiary/10 text-sm font-semibold tracking-[0.2em] text-tertiary transition-all duration-300 group-hover:scale-110 group-hover:bg-tertiary/20">
           ZIP
         </div>
 
         <div className="mt-6 space-y-2">
           <p className="text-lg font-semibold sm:text-xl">Drop your ZIP export here</p>
-          <p className="text-sm text-secondary/80">or click to browse your files</p>
+          <p className="text-sm text-tertiary/80">or click to browse your files</p>
         </div>
       </label>
 
-      <div className="mt-8">
+      {/* Progress */}
+      {loading && (<div className="mt-8">
         {loading && <p>Parsing and enriching…</p>}
         {loading && (
           <div className="mt-4 space-y-2">
-            <div className="h-2 overflow-hidden rounded-full bg-slate-200">
+            <div className="h-2 overflow-hidden rounded-full bg-card">
               <div
                 className="h-full rounded-full bg-secondary transition-[width] duration-200 ease-out"
                 style={{ width: `${progress}%` }}
@@ -144,13 +182,14 @@ export default function UploadSection({ onImported }: UploadSectionProps) {
             <div className="rounded-3xl border border-border/70 bg-white/75 p-4 shadow-sm backdrop-blur">
               <p className="text-sm text-muted">Imported entries</p>
               <p className="text-2xl font-semibold">{enriched.length}</p>
-              <p className="mt-1 text-xs text-slate-500">
+              <p className="mt-1 text-xs text-subtitle">
                 {enriched.filter((entry) => entry.tmdb).length} matched in TMDB
               </p>
             </div>
           </div>
         )}
-      </div>
+      </div>)}
+
     </section>
   );
 }

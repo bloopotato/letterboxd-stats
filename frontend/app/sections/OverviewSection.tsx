@@ -142,15 +142,12 @@ export default function OverviewSection({ importedItems }: OverviewSectionProps)
   const hasItems = overview.importedCount > 0;
 
   return (
-    <section className="rounded-4xl border border-border/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.9),rgba(247,242,233,0.92))] p-5 shadow-sm">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Overview</p>
-          <h2 className="mt-1 text-xl font-semibold tracking-tight text-slate-900">Your stats</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Derived from the enriched films you just imported.
-          </p>
-        </div>
+    <section className="flex flex-col w-full gap-4">
+      {/* Header */}
+      <div className="">
+        <h2 className="text-4xl font-semibold tracking-tight">
+          Overview of your stats
+        </h2>
       </div>
 
       {hasItems && (

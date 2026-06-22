@@ -2,7 +2,7 @@ import JSZip from 'jszip';
 import Papa from 'papaparse';
 import { LetterboxdDiaryCsvRow, LetterboxdWatchlistCsvRow } from '@/types/letterboxd';
 
-const REQUIRED_FILES = ['diary.csv', 'watchlist.csv'] as const;
+const REQUIRED_FILES = ['diary.csv', 'watchlist.csv', 'watched.csv', 'ratings.csv'] as const;
 
 export type ParsedZipResult = {
   diary: LetterboxdDiaryCsvRow[];
