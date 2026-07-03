@@ -9,23 +9,25 @@ import type { EnrichedLetterboxdFilm } from '@/types/letterboxd';
 export default function Home() {
   const [importedItems, setImportedItems] = useState<EnrichedLetterboxdFilm[] | null>(null);
   const hasImportedData = importedItems !== null;
-  const title = "LETTERBOXD STATS";
+  const title = 'LETTERBOXD STATS';
   return (
     <div className="flex min-h-screen flex-col bg-background">
-      <main className="flex flex-1 flex-col px-16 py-10 gap-8">
+      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-8 py-10">
         {/* Title */}
         <div className="flex flex-col items-start gap-3">
           <p className="flex w-full justify-between text-6xl font-semibold uppercase">
-            {title.split("").map((char, i) => {
-              let colour = "";
+            {title.split('').map((char, i) => {
+              let colour = '';
 
-              if (i < 6) colour = "text-primary";        // LETTER
-              else if (i < 10) colour = "text-secondary"; // BOXD
-              else if (i > 10) colour = "text-tertiary"; // STATS
+              if (i < 6)
+                colour = 'text-primary'; // LETTER
+              else if (i < 10)
+                colour = 'text-secondary'; // BOXD
+              else if (i > 10) colour = 'text-tertiary'; // STATS
 
               return (
                 <span key={i} className={colour}>
-                  {char === " " ? "\u00A0" : char}
+                  {char === ' ' ? '\u00A0' : char}
                 </span>
               );
             })}
@@ -41,7 +43,6 @@ export default function Home() {
           {hasImportedData && <OverviewSection importedItems={importedItems} />}
           {hasImportedData && <CastSection importedItems={importedItems} />}
         </div>
-        
       </main>
       <footer className="flex items-center justify-center">
         <p className="py-6 text-xs">Built by</p>

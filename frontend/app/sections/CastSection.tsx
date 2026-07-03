@@ -49,7 +49,7 @@ export default function CastSection({ importedItems }: CastSectionProps) {
           items
             .filter((item) => item.source === 'diary')
             .map((item) => {
-              const year = item.diaryDate ? new Date(item.diaryDate).getFullYear() : null;
+              const year = item.date ? new Date(item.date).getFullYear() : null;
 
               return Number.isFinite(year) ? year : null;
             })
@@ -65,9 +65,9 @@ export default function CastSection({ importedItems }: CastSectionProps) {
     if (!effectiveYears.length) return [];
 
     return items.filter((item) => {
-      if (item.source !== 'diary' || !item.diaryDate) return false;
+      if (item.source !== 'diary' || !item.date) return false;
 
-      const year = new Date(item.diaryDate).getFullYear();
+      const year = new Date(item.date).getFullYear();
       return Number.isFinite(year) && effectiveYears.includes(year);
     });
   }, [effectiveYears, items]);

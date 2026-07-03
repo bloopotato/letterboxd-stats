@@ -61,7 +61,7 @@ function parseDateScore(value?: string | null) {
 }
 
 function getRecentDate(item: EnrichedLetterboxdFilm) {
-  return item.watchedDate ?? item.diaryDate ?? null;
+  return item.watchedDate ?? item.date ?? null;
 }
 
 function buildOverviewData(items: EnrichedLetterboxdFilm[]): OverviewData {
@@ -108,7 +108,8 @@ function buildOverviewData(items: EnrichedLetterboxdFilm[]): OverviewData {
   });
 
   recentDiary.sort((left, right) => {
-    const dateDelta = parseDateScore(getRecentDate(right.item)) - parseDateScore(getRecentDate(left.item));
+    const dateDelta =
+      parseDateScore(getRecentDate(right.item)) - parseDateScore(getRecentDate(left.item));
     if (dateDelta !== 0) return dateDelta;
     return right.index - left.index;
   });
@@ -145,9 +146,7 @@ export default function OverviewSection({ importedItems }: OverviewSectionProps)
     <section className="flex flex-col w-full gap-4">
       {/* Header */}
       <div className="">
-        <h2 className="text-4xl font-semibold tracking-tight">
-          Overview of your stats
-        </h2>
+        <h2 className="text-4xl font-semibold tracking-tight">Overview of your stats</h2>
       </div>
 
       {hasItems && (

@@ -3,6 +3,7 @@ export interface MovieLookup {
   year?: number;
 }
 
+// Details retrieved from Supabase cache
 export interface BulkMovieLookupResult {
   id: number;
   title: string;
@@ -15,4 +16,3 @@ export interface BulkMovieLookupResult {
 export type BulkMovieLookupRow = {
   input_title: string;
 } & BulkMovieLookupResult;
-

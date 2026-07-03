@@ -9,7 +9,7 @@ import type {
   TMDBMovieRow,
 } from '@/utils/data/types';
 import { bulkSearchMovies } from '@/lib/lookup';
-import { EnrichedLetterboxdFilm, FullEnrichedFilm, LetterboxdFilm } from '@/types/letterboxd';
+import { EnrichedLetterboxdFilm, FullEnrichedFilm, LetterboxdEntry } from '@/types/letterboxd';
 import { BulkMovieLookupResult, MovieLookup } from '@/types/database';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -43,7 +43,7 @@ async function fetchExistingFilms(films: MovieLookup[]) {
 }
 
 type TmdbUpsertCandidate = {
-  film: LetterboxdFilm;
+  film: LetterboxdEntry;
   tmdb: TMDBMovieDetails;
   movie: TMDBMovieRow;
 };
@@ -382,7 +382,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const films: LetterboxdFilm[] = body.items || body.films || [];
+    const films: LetterboxdEntry[] = body.items || body.films || [];
     // console.log('Films: ', films);
 
     // ========== (1) Bulk lookup in supabase ==========
@@ -393,7 +393,7 @@ export async function POST(request: Request) {
     const existingMovies = await fetchExistingFilms(lookupInput);
 
     const enriched: EnrichedLetterboxdFilm[] = [];
-    const missing: LetterboxdFilm[] = [];
+    const missing: LetterboxdEntry[] = [];
     const tmdbUpserts: TmdbUpsertCandidate[] = [];
     const tmdbByKey = new Map<string, TMDBMovieDetails | null>();
 
@@ -420,7 +420,7 @@ export async function POST(request: Request) {
     }
 
     // ========== (3) Fill missing data from TMDB ==========
-    const uniqueMissingByKey = new Map<string, LetterboxdFilm>();
+    const uniqueMissingByKey = new Map<string, LetterboxdEntry>();
     for (const film of missing) {
       const key = movieKey(film.title);
       if (!key || uniqueMissingByKey.has(key)) continue;

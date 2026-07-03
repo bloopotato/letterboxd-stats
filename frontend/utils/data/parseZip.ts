@@ -1,12 +1,19 @@
 import JSZip from 'jszip';
 import Papa from 'papaparse';
-import { LetterboxdDiaryCsvRow, LetterboxdWatchlistCsvRow } from '@/types/letterboxd';
+import {
+  LetterboxdDiaryCsvRow,
+  LetterboxdWatchlistCsvRow,
+  LetterboxdWatchedCsvRow,
+  LetterboxdRatingsCsvRow,
+} from '@/types/letterboxd';
 
 const REQUIRED_FILES = ['diary.csv', 'watchlist.csv', 'watched.csv', 'ratings.csv'] as const;
 
 export type ParsedZipResult = {
   diary: LetterboxdDiaryCsvRow[];
   watchlist: LetterboxdWatchlistCsvRow[];
+  watched: LetterboxdWatchedCsvRow[];
+  ratings: LetterboxdRatingsCsvRow[];
 };
 
 function parseNumber(value: unknown): number | null {
@@ -20,6 +27,8 @@ export async function parseLetterboxdZip(file: File): Promise<ParsedZipResult> {
 
   const diary: LetterboxdDiaryCsvRow[] = [];
   const watchlist: LetterboxdWatchlistCsvRow[] = [];
+  const watched: LetterboxdWatchedCsvRow[] = [];
+  const ratings: LetterboxdRatingsCsvRow[] = [];
   const requiredFileSet = new Set<string>(REQUIRED_FILES as readonly string[]);
 
   console.log('Files in ZIP:', Object.keys(zip.files));
@@ -63,9 +72,34 @@ export async function parseLetterboxdZip(file: File): Promise<ParsedZipResult> {
         });
       }
     }
+
+    if (filename === 'watched.csv') {
+      for (const r of rows) {
+        watched.push({
+          Date: r['Date'] || '',
+          Name: r['Name'] || '',
+          Year: parseNumber(r['Year']) ?? 0,
+          'Letterboxd URI': r['Letterboxd URI'] || '',
+        });
+      }
+    }
+
+    if (filename === 'ratings.csv') {
+      for (const r of rows) {
+        ratings.push({
+          Date: r['Date'] || '',
+          Name: r['Name'] || '',
+          Year: parseNumber(r['Year']) ?? 0,
+          'Letterboxd URI': r['Letterboxd URI'] || '',
+          Rating: parseNumber(r['Rating']),
+        });
+      }
+    }
   }
 
-  console.log(`Parsed ${diary.length} diary entries and ${watchlist.length} watchlist entries`);
+  console.log(
+    `Parsed ${diary.length} diary entries, ${watchlist.length} watchlist entries, ${watched.length} watched entries, and ${ratings.length} ratings`
+  );
 
-  return { diary, watchlist };
+  return { diary, watchlist, watched, ratings };
 }

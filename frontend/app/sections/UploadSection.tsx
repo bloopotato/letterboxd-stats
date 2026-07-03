@@ -3,17 +3,18 @@
 import { useState } from 'react';
 import { parseLetterboxdZip } from '@/utils/data/parseZip';
 import normalise from '@/utils/data/normalise';
-import { EnrichedLetterboxdFilm, LetterboxdFilm } from '@/types/letterboxd';
+import { EnrichedLetterboxdFilm, LetterboxdEntry } from '@/types/letterboxd';
 
 type UploadSectionProps = {
   onImported?: (results: EnrichedLetterboxdFilm[]) => void;
 };
 
+// Instructions for uploading letterboxd data
 const INSTRUCTIONS = [
-  "On Letterboxd, go to Settings → Data → Export Your Data",
-  "Download the ZIP file",
-  "Upload the ZIP file below to see your stats",
-]
+  'On Letterboxd, go to Settings → Data → Export Your Data',
+  'Download the ZIP file',
+  'Upload the ZIP file below to see your stats',
+];
 
 export default function UploadSection({ onImported }: UploadSectionProps) {
   const [loading, setLoading] = useState(false);
@@ -51,7 +52,14 @@ export default function UploadSection({ onImported }: UploadSectionProps) {
       // (2) Normalise and merge the entries into a single list of lookup items
       const diaryFilms = normalise.normaliseFromDiary(parsedData.diary);
       const watchlistFilms = normalise.normaliseFromWatchlist(parsedData.watchlist);
-      const items: LetterboxdFilm[] = normalise.mergeCollections(diaryFilms, watchlistFilms);
+      const watchedFilms = normalise.normaliseFromWatched(parsedData.watched);
+      const ratingsFilms = normalise.normaliseFromRatings(parsedData.ratings);
+      const items: LetterboxdEntry[] = normalise.mergeCollections(
+        diaryFilms,
+        watchlistFilms,
+        watchedFilms,
+        ratingsFilms
+      );
       const estimatedTotalMs = estimateDurationMs(items.length);
       const startedAt = Date.now();
 
@@ -100,9 +108,7 @@ export default function UploadSection({ onImported }: UploadSectionProps) {
     <section className="flex flex-col w-full gap-4">
       {/* Header */}
       <div className="">
-        <h2 className="text-4xl font-semibold tracking-tight">
-          Upload your Letterboxd export
-        </h2>
+        <h2 className="text-4xl font-semibold tracking-tight">Upload your Letterboxd export</h2>
         <p className="mt-2 text-sm text-primary/80">
           Choose the Letterboxd .zip export and we&apos;ll handle the stats.
         </p>
@@ -130,9 +136,7 @@ export default function UploadSection({ onImported }: UploadSectionProps) {
               {i + 1}
             </div>
 
-            <p className="text-md text-secondary">
-              {instruction}
-            </p>
+            <p className="text-md text-secondary">{instruction}</p>
           </div>
         ))}
       </div>
@@ -161,35 +165,36 @@ export default function UploadSection({ onImported }: UploadSectionProps) {
       </label>
 
       {/* Progress */}
-      {loading && (<div className="mt-8">
-        {loading && <p>Parsing and enriching…</p>}
-        {loading && (
-          <div className="mt-4 space-y-2">
-            <div className="h-2 overflow-hidden rounded-full bg-card">
-              <div
-                className="h-full rounded-full bg-secondary transition-[width] duration-200 ease-out"
-                style={{ width: `${progress}%` }}
-              />
+      {loading && (
+        <div className="mt-8">
+          {loading && <p>Parsing and enriching…</p>}
+          {loading && (
+            <div className="mt-4 space-y-2">
+              <div className="h-2 overflow-hidden rounded-full bg-card">
+                <div
+                  className="h-full rounded-full bg-secondary transition-[width] duration-200 ease-out"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+              <div className="flex items-center justify-between text-xs text-slate-500">
+                <span>{progress}% complete</span>
+                <span>{etaSeconds != null ? `About ${formatEta(etaSeconds)} left` : ''}</span>
+              </div>
             </div>
-            <div className="flex items-center justify-between text-xs text-slate-500">
-              <span>{progress}% complete</span>
-              <span>{etaSeconds != null ? `About ${formatEta(etaSeconds)} left` : ''}</span>
+          )}
+          {enriched && (
+            <div className="space-y-4">
+              <div className="rounded-3xl border border-border/70 bg-white/75 p-4 shadow-sm backdrop-blur">
+                <p className="text-sm text-muted">Imported entries</p>
+                <p className="text-2xl font-semibold">{enriched.length}</p>
+                <p className="mt-1 text-xs text-subtitle">
+                  {enriched.filter((entry) => entry.tmdb).length} matched in TMDB
+                </p>
+              </div>
             </div>
-          </div>
-        )}
-        {enriched && (
-          <div className="space-y-4">
-            <div className="rounded-3xl border border-border/70 bg-white/75 p-4 shadow-sm backdrop-blur">
-              <p className="text-sm text-muted">Imported entries</p>
-              <p className="text-2xl font-semibold">{enriched.length}</p>
-              <p className="mt-1 text-xs text-subtitle">
-                {enriched.filter((entry) => entry.tmdb).length} matched in TMDB
-              </p>
-            </div>
-          </div>
-        )}
-      </div>)}
-
+          )}
+        </div>
+      )}
     </section>
   );
 }
