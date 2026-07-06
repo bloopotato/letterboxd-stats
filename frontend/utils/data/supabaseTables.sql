@@ -18,6 +18,7 @@ drop table if exists public.tmdb_credits cascade;
 create table if not exists public.tmdb_movies (
 	id bigint primary key,
     imdb_id text unique,
+	letterboxd_uri text,
 	title text not null,
 	original_title text not null,
 	original_language text not null,
@@ -33,6 +34,10 @@ create table if not exists public.tmdb_movies (
 	created_at timestamptz not null default now(),
 	updated_at timestamptz not null default now()
 );
+
+create unique index if not exists idx_tmdb_movies_letterboxd_uri_unique
+	on public.tmdb_movies (letterboxd_uri)
+	where letterboxd_uri is not null;
 
 create table if not exists public.tmdb_genres (
 	id integer primary key,

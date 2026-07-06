@@ -60,6 +60,8 @@ export default function UploadSection({ onImported }: UploadSectionProps) {
         watchedFilms,
         ratingsFilms
       );
+
+      // Estimate total duration for progress bar and ETA
       const estimatedTotalMs = estimateDurationMs(items.length);
       const startedAt = Date.now();
 
@@ -74,7 +76,7 @@ export default function UploadSection({ onImported }: UploadSectionProps) {
         setEtaSeconds(Math.max(1, Math.ceil(remainingMs / 1000)));
       }, 250);
 
-      // (3) Lookup in supabase
+      // (3) Lookup in supabase - [/api/lookup]
       const res = await fetch('/api/lookup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

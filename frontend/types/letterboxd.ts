@@ -1,7 +1,6 @@
 // -------------------- LETTERBOXD CSV COLUMNS --------------------
 
-import { BulkMovieLookupResult } from '@/types/database';
-import { TMDBMovieDetails } from '@/utils/data/types';
+import { BulkMovieLookupResult, TMDBMovieDetails } from '@/types/database';
 
 // diary.csv
 export interface LetterboxdDiaryCsvRow {
