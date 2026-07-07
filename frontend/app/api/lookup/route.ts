@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { TMDBSearchResponse, TMDBProductionCompanyRow } from '@/utils/data/types';
 import { bulkSearchMovies } from '@/lib/lookup';
-import { EnrichedLetterboxdFilm, FullEnrichedFilm, LetterboxdEntry } from '@/types/letterboxd';
 import {
   BulkMovieLookupResult,
   MovieLookup,
@@ -11,6 +10,7 @@ import {
   TMDBGenreRow,
   TMDBLanguageRow,
 } from '@/types/database';
+import { UserFilm } from '@/types/statistics';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -41,7 +41,7 @@ function filmKeyFromParts(title: string, year?: number): string | null {
 
 async function fetchExistingFilms(films: MovieLookup[]): Promise<ExistingMovieLookup> {
   const rows = await bulkSearchMovies(films);
-  console.log('bulkSearchMovies returned rows:', rows);
+  // console.log('bulkSearchMovies returned rows:', rows);
 
   const byUri = new Map<string, BulkMovieLookupResult>();
   const byTitle = new Map<string, BulkMovieLookupResult>();
@@ -57,6 +57,7 @@ async function fetchExistingFilms(films: MovieLookup[]): Promise<ExistingMovieLo
       release_date: row.release_date,
       poster_path: row.poster_path,
       vote_average: row.vote_average,
+      runtime: row.runtime,
       letterboxd_uri: row.letterboxd_uri,
       matched_by: row.matched_by,
     };
@@ -103,7 +104,7 @@ async function updateMovieLetterboxdUri(movieId: number, letterboxdUri: string) 
 }
 
 type TmdbUpsertCandidate = {
-  film: LetterboxdEntry;
+  film: UserFilm;
   tmdb: TMDBMovieDetails;
   movie: TMDBMovieRow;
 };
@@ -443,19 +444,19 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const films: LetterboxdEntry[] = body.items || body.films || [];
+    const films: UserFilm[] = body.items ?? [];
     // console.log('Films: ', films);
 
     // ========== (1) Bulk lookup in supabase ==========
     const lookupInput: MovieLookup[] = films.map((f) => ({
-      title: f.title,
+      title: f.name,
       year: f.year,
       letterboxd_uri: f.letterboxdUri ?? null,
     }));
     const existingMovies = await fetchExistingFilms(lookupInput);
 
-    const enriched: EnrichedLetterboxdFilm[] = [];
-    const missing: LetterboxdEntry[] = [];
+    const enriched: UserFilm[] = [];
+    const missing: UserFilm[] = [];
     const tmdbUpserts: TmdbUpsertCandidate[] = [];
     const tmdbByKey = new Map<string, TMDBMovieDetails | null>();
     let uriMatchedCount = 0;
@@ -464,8 +465,8 @@ export async function POST(request: Request) {
     // ========== (2) Fill data from lookup ==========
     for (const film of films) {
       const uriKey = normaliseUri(film.letterboxdUri);
-      const perFilmKey = filmKeyFromParts(film.title, film.year);
-      const titleKey = movieKey(film.title);
+      const perFilmKey = filmKeyFromParts(film.name, film.year);
+      const titleKey = movieKey(film.name);
 
       const match =
         (uriKey ? existingMovies.byUri.get(uriKey) : undefined) ??
@@ -487,13 +488,15 @@ export async function POST(request: Request) {
 
         enriched.push({
           ...film,
-          film: match,
+          tmdbId: match.id,
+          runtime: match.runtime ?? null,
           cached: true,
         });
       } else {
         enriched.push({
           ...film,
-          film: null,
+          tmdbId: null,
+          runtime: null,
           cached: false,
         });
 
@@ -502,9 +505,9 @@ export async function POST(request: Request) {
     }
 
     // ========== (3) Fill missing data from TMDB ==========
-    const uniqueMissingByKey = new Map<string, LetterboxdEntry>();
+    const uniqueMissingByKey = new Map<string, UserFilm>();
     for (const film of missing) {
-      const key = movieKey(film.title);
+      const key = movieKey(film.name);
       if (!key || uniqueMissingByKey.has(key)) continue;
       uniqueMissingByKey.set(key, film);
     }
@@ -513,8 +516,8 @@ export async function POST(request: Request) {
       Array.from(uniqueMissingByKey.values()),
       TMDB_LOOKUP_CONCURRENCY,
       async (film) => {
-        const tmdb = await fetchFromTmdb(film.title, film.year);
-        const key = movieKey(film.title);
+        const tmdb = await fetchFromTmdb(film.name, film.year);
+        const key = movieKey(film.name);
         const normalisedUri = normaliseUri(film.letterboxdUri);
 
         if (tmdb) {
@@ -563,22 +566,22 @@ export async function POST(request: Request) {
       }
     );
 
-    const fullResults: FullEnrichedFilm[] = films.map((film) => {
-      const key = movieKey(film.title);
-      const uriKey = normaliseUri(film.letterboxdUri);
-      const cached =
-        (uriKey ? existingMovies.byUri.get(uriKey) : undefined) ??
-        (key ? existingMovies.byTitle.get(key) : undefined) ??
-        null;
-      const tmdbFromUri = uriKey ? (tmdbByKey.get(uriKey) ?? null) : null;
-      const tmdb = tmdbFromUri !== null ? tmdbFromUri : key ? (tmdbByKey.get(key) ?? null) : null;
+    // const fullResults: FullUserFilmResult[] = films.map((film) => {
+    //   const key = movieKey(film.name);
+    //   const uriKey = normaliseUri(film.letterboxdUri);
+    //   const cached =
+    //     (uriKey ? existingMovies.byUri.get(uriKey) : undefined) ??
+    //     (key ? existingMovies.byTitle.get(key) : undefined) ??
+    //     null;
+    //   const tmdbFromUri = uriKey ? (tmdbByKey.get(uriKey) ?? null) : null;
+    //   const tmdb = tmdbFromUri !== null ? tmdbFromUri : key ? (tmdbByKey.get(key) ?? null) : null;
 
-      return {
-        base: film,
-        cached,
-        tmdb,
-      };
-    });
+    //   return {
+    //     base: film,
+    //     cached,
+    //     tmdb,
+    //   };
+    // });
 
     const analytics = {
       inputCount: films.length,
@@ -588,25 +591,29 @@ export async function POST(request: Request) {
       uriMatchedCount,
       titleMatchedCount,
       filmSummary: films.map((film) => ({
-        title: film.title,
+        title: film.name,
         year: film.year ?? null,
         cached: Boolean(
           (normaliseUri(film.letterboxdUri) &&
             existingMovies.byUri.get(normaliseUri(film.letterboxdUri)!)) ||
-          (movieKey(film.title) && existingMovies.byTitle.get(movieKey(film.title)!))
+          (movieKey(film.name) && existingMovies.byTitle.get(movieKey(film.name)!))
         ),
       })),
     };
 
     console.log('lookup.analytics', {
       analytics,
-      results: enriched,
-      fullResults,
+      films: enriched,
+      // fullResults,
       missing,
       tmdbUpserts,
     });
 
-    return NextResponse.json({ ok: true, results: enriched, fullResults, tmdbUpserts, analytics });
+    return NextResponse.json({
+      ok: true,
+      films: enriched, // fullResults, tmdbUpserts,
+      analytics,
+    });
   } catch (err) {
     return NextResponse.json({ ok: false, error: String(err) }, { status: 500 });
   }

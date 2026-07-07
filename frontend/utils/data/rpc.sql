@@ -68,7 +68,7 @@ $$;
 create or replace function top_people_for_movies(
   movie_ids bigint[],
   release_years int[] default null,
-  limit_count int default 5
+  limit_count int default 10
 )
 returns table (
   category text,

@@ -17,7 +17,6 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE);
  * Bulk search movies in supabase
  */
 export async function bulkSearchMovies(entries: MovieLookup[]): Promise<BulkMovieLookupRow[]> {
-  console.log('bulkSearchMovies called with entries:', entries);
   const { data, error } = await supabase.rpc('search_movies_bulk', {
     entries: entries.map((e) => ({
       title: e.title,

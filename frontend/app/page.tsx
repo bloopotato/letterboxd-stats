@@ -3,11 +3,12 @@
 import { useState } from 'react';
 import UploadSection from './sections/UploadSection';
 import OverviewSection from './sections/OverviewSection';
+import type { UserFilm } from '@/types/statistics';
+import StatsSection from './sections/StatsSection';
 import CastSection from './sections/CastSection';
-import type { EnrichedLetterboxdFilm } from '@/types/letterboxd';
 
 export default function Home() {
-  const [importedItems, setImportedItems] = useState<EnrichedLetterboxdFilm[] | null>(null);
+  const [importedItems, setImportedItems] = useState<UserFilm[] | null>(null);
   const hasImportedData = importedItems !== null;
   const title = 'LETTERBOXD STATS';
   return (
@@ -40,8 +41,13 @@ export default function Home() {
         {/* Sections */}
         <div className="flex flex-col gap-8">
           <UploadSection onImported={setImportedItems} />
-          {hasImportedData && <OverviewSection importedItems={importedItems} />}
-          {hasImportedData && <CastSection importedItems={importedItems} />}
+          {hasImportedData && (
+            <>
+              <OverviewSection importedItems={importedItems} />
+              <CastSection importedItems={importedItems} />
+              <StatsSection importedItems={importedItems} />
+            </>
+          )}
         </div>
       </main>
       <footer className="flex items-center justify-center">

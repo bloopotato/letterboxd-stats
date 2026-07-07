@@ -2,11 +2,11 @@
 
 import { useState } from 'react';
 import { parseLetterboxdZip } from '@/utils/data/parseZip';
-import normalise from '@/utils/data/normalise';
-import { EnrichedLetterboxdFilm, LetterboxdEntry } from '@/types/letterboxd';
+import { buildUserFilmMap } from '@/utils/data/normalise';
+import { UserFilm } from '@/types/statistics';
 
 type UploadSectionProps = {
-  onImported?: (results: EnrichedLetterboxdFilm[]) => void;
+  onImported?: (results: UserFilm[]) => void;
 };
 
 // Instructions for uploading letterboxd data
@@ -18,7 +18,7 @@ const INSTRUCTIONS = [
 
 export default function UploadSection({ onImported }: UploadSectionProps) {
   const [loading, setLoading] = useState(false);
-  const [enriched, setEnriched] = useState<EnrichedLetterboxdFilm[] | null>(null);
+  const [enriched, setEnriched] = useState<UserFilm[] | null>(null);
   const [progress, setProgress] = useState(0);
   const [etaSeconds, setEtaSeconds] = useState<number | null>(null);
 
@@ -49,20 +49,18 @@ export default function UploadSection({ onImported }: UploadSectionProps) {
       // (1) Parse the ZIP file and extract diary/watchlist entries
       const parsedData = await parseLetterboxdZip(file);
 
-      // (2) Normalise and merge the entries into a single list of lookup items
-      const diaryFilms = normalise.normaliseFromDiary(parsedData.diary);
-      const watchlistFilms = normalise.normaliseFromWatchlist(parsedData.watchlist);
-      const watchedFilms = normalise.normaliseFromWatched(parsedData.watched);
-      const ratingsFilms = normalise.normaliseFromRatings(parsedData.ratings);
-      const items: LetterboxdEntry[] = normalise.mergeCollections(
-        diaryFilms,
-        watchlistFilms,
-        watchedFilms,
-        ratingsFilms
+      // (2) Build a map of unique films from the parsed data
+      const films = Array.from(
+        buildUserFilmMap(
+          parsedData.diary,
+          parsedData.watchlist,
+          parsedData.watched,
+          parsedData.ratings
+        ).values()
       );
 
       // Estimate total duration for progress bar and ETA
-      const estimatedTotalMs = estimateDurationMs(items.length);
+      const estimatedTotalMs = estimateDurationMs(films.length);
       const startedAt = Date.now();
 
       setProgress(0);
@@ -76,14 +74,17 @@ export default function UploadSection({ onImported }: UploadSectionProps) {
         setEtaSeconds(Math.max(1, Math.ceil(remainingMs / 1000)));
       }, 250);
 
-      // (3) Lookup in supabase - [/api/lookup]
+      // (4) Lookup in supabase - [/api/lookup]
       const res = await fetch('/api/lookup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items }),
+        body: JSON.stringify({ items: films }),
       });
       const json = await res.json();
       if (!json.ok) throw new Error(json.error || 'Lookup failed');
+
+      const enrichedFilms: UserFilm[] = json.films;
+      console.log('Enriched films:', enrichedFilms);
 
       if (progressTimer != null) {
         window.clearInterval(progressTimer);
@@ -91,9 +92,8 @@ export default function UploadSection({ onImported }: UploadSectionProps) {
       setProgress(100);
       setEtaSeconds(0);
 
-      const results: EnrichedLetterboxdFilm[] = json.results;
-      setEnriched(results);
-      onImported?.(results);
+      setEnriched(enrichedFilms);
+      onImported?.(enrichedFilms);
     } catch (error) {
       console.error('Error parsing/enriching ZIP file:', error);
     } finally {
@@ -190,7 +190,7 @@ export default function UploadSection({ onImported }: UploadSectionProps) {
                 <p className="text-sm text-muted">Imported entries</p>
                 <p className="text-2xl font-semibold">{enriched.length}</p>
                 <p className="mt-1 text-xs text-subtitle">
-                  {enriched.filter((entry) => entry.tmdb).length} matched in TMDB
+                  {/* {enriched.filter((entry) => entry.tmdb).length} matched in TMDB */}
                 </p>
               </div>
             </div>

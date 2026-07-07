@@ -12,6 +12,7 @@ export interface BulkMovieLookupResult {
   release_date: string | null;
   poster_path: string | null;
   vote_average: number;
+  runtime: number | null;
   letterboxd_uri: string | null;
   matched_by: 'uri' | 'title_year';
 }

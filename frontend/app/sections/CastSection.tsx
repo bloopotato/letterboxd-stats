@@ -1,16 +1,10 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import type { CastStats } from '@/utils/data/types';
-import type { EnrichedLetterboxdFilm } from '@/types/letterboxd';
+import type { UserFilm, CastStats } from '@/types/statistics';
 
 type CastSectionProps = {
-  importedItems: EnrichedLetterboxdFilm[] | null;
-};
-
-type CastMovieItem = {
-  title: string;
-  year: number | null;
+  importedItems: UserFilm[] | null;
 };
 
 function formatCount(count: number) {
@@ -27,11 +21,6 @@ function StatCard({ label, value }: { label: string; value: string }) {
   );
 }
 
-// Format movie for display
-function formatMovieLabel(movie: CastMovieItem) {
-  return movie.year ? `${movie.title} (${movie.year})` : movie.title;
-}
-
 export default function CastSection({ importedItems }: CastSectionProps) {
   const [stats, setStats] = useState<CastStats | null>(null);
   const [loading, setLoading] = useState(false);
@@ -42,67 +31,31 @@ export default function CastSection({ importedItems }: CastSectionProps) {
   const hasItems = items.length > 0;
 
   // Compute available diary years from diary-only items.
-  const availableYears = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          items
-            .filter((item) => item.source === 'diary')
-            .map((item) => {
-              const year = item.date ? new Date(item.date).getFullYear() : null;
+  const availableYears = useMemo(() => {
+    const years = new Set<number>();
 
-              return Number.isFinite(year) ? year : null;
-            })
-            .filter((year): year is number => typeof year === 'number')
-        )
-      ).sort((left, right) => right - left),
-    [items]
-  );
-
-  const effectiveYears = selectedYears ?? availableYears;
-
-  const visibleItems = useMemo(() => {
-    if (!effectiveYears.length) return [];
-
-    return items.filter((item) => {
-      if (item.source !== 'diary' || !item.date) return false;
-
-      const year = new Date(item.date).getFullYear();
-      return Number.isFinite(year) && effectiveYears.includes(year);
-    });
-  }, [effectiveYears, items]);
-
-  const castMoviesByPersonId = useMemo(() => {
-    const byPersonId = new Map<number, CastMovieItem[]>();
-
-    for (const item of visibleItems) {
-      const castMembers = item.tmdb?.credits?.cast ?? [];
-      if (!castMembers.length) continue;
-
-      const movie = {
-        title: item.tmdb?.title ?? item.title,
-        year: item.year ?? null,
-      };
-
-      for (const castMember of castMembers) {
-        const current = byPersonId.get(castMember.id) ?? [];
-        current.push(movie);
-        byPersonId.set(castMember.id, current);
+    for (const film of items) {
+      for (const event of film.watchedEvents) {
+        years.add(new Date(event.date).getFullYear());
       }
     }
 
-    for (const movies of byPersonId.values()) {
-      movies.sort((left, right) => {
-        if (left.year !== right.year) {
-          return (right.year ?? 0) - (left.year ?? 0);
-        }
+    return [...years].sort((a, b) => b - a);
+  }, [items]);
 
-        return left.title.localeCompare(right.title);
-      });
+  const visibleItems = useMemo(() => {
+    // All years
+    if (selectedYears === null) {
+      return items.filter((film) => film.watched);
     }
 
-    return byPersonId;
-  }, [visibleItems]);
+    // Specific years
+    return items.filter((film) => {
+      return film.watchedEvents.some((event) =>
+        selectedYears.includes(new Date(event.date).getFullYear())
+      );
+    });
+  }, [selectedYears, items]);
 
   useEffect(() => {
     if (!hasItems) {
@@ -122,7 +75,7 @@ export default function CastSection({ importedItems }: CastSectionProps) {
           // send only diary items that match the selected diary years
           body: JSON.stringify({
             items: visibleItems
-              .map((item) => ({ tmdbId: item.tmdb?.id ?? item.film?.id }))
+              .map((item) => ({ tmdbId: item.tmdbId }))
               .filter((it) => it.tmdbId && typeof it.tmdbId === 'number'),
           }),
           cache: 'no-store',
@@ -197,7 +150,7 @@ export default function CastSection({ importedItems }: CastSectionProps) {
             All years
           </button>
           {availableYears.map((year) => {
-            const active = effectiveYears.includes(year);
+            const active = selectedYears === null ? false : selectedYears.includes(year);
 
             return (
               <button
@@ -237,32 +190,26 @@ export default function CastSection({ importedItems }: CastSectionProps) {
                   stats.topCast.map((person) => (
                     <div
                       key={person.id}
-                      className="space-y-1 rounded-2xl border border-slate-100 bg-slate-50/70 px-3 py-2"
+                      className="flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50/70 px-3 py-2"
                     >
-                      <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center justify-between">
                         <span className="text-sm font-medium text-slate-800">{person.name}</span>
+
                         <span className="text-sm text-slate-500">{formatCount(person.count)}</span>
                       </div>
-                      {castMoviesByPersonId.get(person.id)?.length ? (
-                        <div className="space-y-1 pl-1">
-                          {castMoviesByPersonId
-                            .get(person.id)!
-                            .slice(0, 3)
-                            .map((movie) => (
-                              <p
-                                key={`${person.id}-${movie.title}-${movie.year ?? 'na'}`}
-                                className="text-xs text-slate-500"
-                              >
-                                {formatMovieLabel(movie)}
-                              </p>
-                            ))}
-                          {castMoviesByPersonId.get(person.id)!.length > 3 && (
-                            <p className="text-xs text-slate-400">
-                              +{castMoviesByPersonId.get(person.id)!.length - 3} more
-                            </p>
-                          )}
-                        </div>
-                      ) : null}
+                      <div className="space-y-1 pl-1">
+                        {person.movies.slice(0, 10).map((movie) => (
+                          <p key={movie.id} className="text-xs text-slate-500">
+                            {movie.title} ({movie.year})
+                          </p>
+                        ))}
+
+                        {person.movies.length > 10 && (
+                          <p className="text-xs text-slate-400">
+                            +{person.movies.length - 10} more
+                          </p>
+                        )}
+                      </div>
                     </div>
                   ))
                 ) : (
@@ -277,8 +224,17 @@ export default function CastSection({ importedItems }: CastSectionProps) {
                 {stats.topDirectors.length ? (
                   stats.topDirectors.map((person) => (
                     <div key={person.id} className="flex items-center justify-between gap-3">
-                      <span className="text-sm font-medium text-slate-800">{person.name}</span>
-                      <span className="text-sm text-slate-500">{formatCount(person.count)}</span>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium">{person.name}</span>
+                        <span className="text-sm text-slate-500">{formatCount(person.count)}</span>
+                      </div>
+                      <div className="space-y-1 pl-1">
+                        {person.movies.map((movie) => (
+                          <p key={movie.id} className="text-xs text-slate-500">
+                            {movie.title} ({movie.year})
+                          </p>
+                        ))}
+                      </div>
                     </div>
                   ))
                 ) : (

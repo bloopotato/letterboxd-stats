@@ -1,108 +1,94 @@
 import {
   LetterboxdDiaryCsvRow,
-  LetterboxdEntry,
   LetterboxdWatchedCsvRow,
   LetterboxdWatchlistCsvRow,
   LetterboxdRatingsCsvRow,
 } from '@/types/letterboxd';
+import { UserFilm } from '@/types/statistics';
 
-export function normaliseFromDiary(entries: LetterboxdDiaryCsvRow[]): LetterboxdEntry[] {
-  return entries.map((e) => ({
-    title: e.Name,
-    year: e.Year || undefined,
-    letterboxdUri: e['Letterboxd URI'] || undefined,
-    date: e.Date || undefined,
-    watchedDate: e['Watched Date'] ?? undefined,
-    rating: e.Rating ?? undefined,
-    rewatch: !!e.Rewatch,
-    tags: e.Tags ?? undefined,
-  }));
+// Helper function to generate unique key for film
+function filmKey(title: string, year?: number) {
+  return `${title.toLowerCase()}|${year ?? ''}`;
 }
 
-export function normaliseFromWatchlist(entries: LetterboxdWatchlistCsvRow[]): LetterboxdEntry[] {
-  return entries.map((e) => ({
-    title: e.Name,
-    year: e.Year || undefined,
-    letterboxdUri: e['Letterboxd URI'] || undefined,
-    date: e.Date || undefined,
-  }));
+function createUserFilm(): UserFilm {
+  return {
+    name: '',
+    year: 0,
+    watched: false,
+    inWatchlist: false,
+    rating: null,
+    watchedEvents: [],
+    letterboxdUri: null,
+    tmdbId: null,
+    runtime: null,
+    cached: false,
+  };
 }
 
-export function normaliseFromWatched(entries: LetterboxdWatchedCsvRow[]): LetterboxdEntry[] {
-  return entries.map((e) => ({
-    title: e.Name,
-    year: e.Year || undefined,
-    letterboxdUri: e['Letterboxd URI'] || undefined,
-    date: e.Date || undefined,
-  }));
-}
+export function buildUserFilmMap(
+  diary: LetterboxdDiaryCsvRow[],
+  watchlist: LetterboxdWatchlistCsvRow[],
+  watched: LetterboxdWatchedCsvRow[],
+  ratings: LetterboxdRatingsCsvRow[]
+): Map<string, UserFilm> {
+  const films = new Map<string, UserFilm>();
 
-export function normaliseFromRatings(entries: LetterboxdRatingsCsvRow[]): LetterboxdEntry[] {
-  return entries.map((e) => ({
-    title: e.Name,
-    year: e.Year || undefined,
-    letterboxdUri: e['Letterboxd URI'] || undefined,
-    date: e.Date || undefined,
-    rating: e.Rating ?? undefined,
-  }));
-}
-
-export function mergeCollections(
-  diaryFilms: LetterboxdEntry[],
-  watchlistFilms: LetterboxdEntry[],
-  watchedFilms: LetterboxdEntry[],
-  ratingsFilms: LetterboxdEntry[]
-): LetterboxdEntry[] {
-  const map = new Map<string, LetterboxdEntry>();
-  function key(f: LetterboxdEntry) {
-    return `${f.title.toLowerCase()}|${f.year ?? ''}`;
+  // 1. watched.csv
+  for (const movie of watched) {
+    const key = filmKey(movie.Name, movie.Year);
+    films.set(key, {
+      name: movie.Name,
+      year: movie.Year,
+      watched: true,
+      inWatchlist: false,
+      rating: null,
+      watchedEvents: [],
+      letterboxdUri: movie['Letterboxd URI'] || null,
+      tmdbId: null,
+      runtime: null,
+      cached: false,
+    });
   }
 
-  for (const f of diaryFilms)
-    map.set(key(f), { ...f, source: 'diary' } as LetterboxdEntry & { source?: string });
-  for (const f of watchlistFilms) {
-    const k = key(f);
-    if (map.has(k)) {
-      const existing = map.get(k)!;
-      map.set(k, { ...existing, ...f });
-    } else {
-      map.set(k, { ...f, source: 'watchlist' } as LetterboxdEntry & {
-        source?: string;
-      });
-    }
-  }
-  for (const f of watchedFilms) {
-    const k = key(f);
-    if (map.has(k)) {
-      const existing = map.get(k)!;
-      map.set(k, { ...existing, ...f });
-    } else {
-      map.set(k, { ...f, source: 'watched' } as LetterboxdEntry & {
-        source?: string;
-      });
-    }
-  }
-  for (const f of ratingsFilms) {
-    const k = key(f);
-    if (map.has(k)) {
-      const existing = map.get(k)!;
-      map.set(k, { ...existing, ...f });
-    } else {
-      map.set(k, { ...f, source: 'ratings' } as LetterboxdEntry & {
-        source?: string;
-      });
-    }
+  // 2. ratings.csv
+  for (const movie of ratings) {
+    const key = filmKey(movie.Name, movie.Year);
+    const existing = films.get(key) ?? createUserFilm();
+    existing.name = movie.Name;
+    existing.year = movie.Year;
+    existing.rating = movie.Rating ?? null;
+    existing.letterboxdUri = movie['Letterboxd URI'] || null;
+    films.set(key, existing);
   }
 
-  return Array.from(map.values()) as LetterboxdEntry[];
+  // 3. watchlist.csv
+  for (const movie of watchlist) {
+    const key = filmKey(movie.Name, movie.Year);
+    const existing = films.get(key) ?? createUserFilm();
+    existing.name = movie.Name;
+    existing.year = movie.Year;
+    existing.inWatchlist = true;
+    existing.letterboxdUri = movie['Letterboxd URI'] || null;
+    films.set(key, existing);
+  }
+
+  // 4. diary.csv
+  for (const movie of diary) {
+    const key = filmKey(movie.Name, movie.Year);
+    const existing = films.get(key) ?? createUserFilm();
+    existing.name = movie.Name;
+    existing.year = movie.Year;
+    existing.watched = true;
+    existing.watchedEvents.push({
+      date: movie.Date,
+      rating: movie.Rating ?? null,
+      rewatch: !!movie.Rewatch,
+      tags: movie.Tags ? movie.Tags.split(',').map((t) => t.trim()) : [],
+      letterboxdUri: movie['Letterboxd URI'] || null,
+    });
+    films.set(key, existing);
+  }
+
+  return films;
 }
-
-const normalise = {
-  normaliseFromDiary,
-  normaliseFromWatchlist,
-  normaliseFromWatched,
-  normaliseFromRatings,
-  mergeCollections,
-};
-
-export default normalise;

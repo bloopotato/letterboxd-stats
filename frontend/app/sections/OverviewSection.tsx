@@ -1,11 +1,10 @@
 'use client';
 
-import Image from 'next/image';
 import { useMemo } from 'react';
-import type { EnrichedLetterboxdFilm } from '@/types/letterboxd';
+import type { UserFilm } from '@/types/statistics';
 
 type OverviewSectionProps = {
-  importedItems: EnrichedLetterboxdFilm[] | null;
+  importedItems: UserFilm[];
 };
 
 type RankedItem = {
@@ -13,8 +12,8 @@ type RankedItem = {
   count: number;
 };
 
-type RecentDiaryEntry = {
-  item: EnrichedLetterboxdFilm;
+type RecentWatchEntry = {
+  film: UserFilm;
   index: number;
 };
 
@@ -23,11 +22,11 @@ type OverviewData = {
   diaryCount: number;
   ratedCount: number;
   tmdbMatchedCount: number;
+  watchlistCount: number;
   averageRating: number | null;
   averageRuntime: number | null;
-  topGenres: RankedItem[];
-  topLanguages: RankedItem[];
-  recentDiary: EnrichedLetterboxdFilm[];
+  topTags: RankedItem[];
+  recentWatchHistory: RecentWatchEntry[];
 };
 
 function StatCard({ label, value }: { label: string; value: string }) {
@@ -47,12 +46,6 @@ function formatRuntime(value: number | null) {
   return value == null ? '—' : `${Math.round(value)} min`;
 }
 
-function getPosterUrl(item: EnrichedLetterboxdFilm) {
-  const posterPath = item.tmdb?.poster_path ?? item.film?.poster_path;
-
-  return posterPath ? `https://image.tmdb.org/t/p/original${posterPath}` : null;
-}
-
 function parseDateScore(value?: string | null) {
   if (!value) return Number.NEGATIVE_INFINITY;
 
@@ -60,80 +53,75 @@ function parseDateScore(value?: string | null) {
   return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp;
 }
 
-function getRecentDate(item: EnrichedLetterboxdFilm) {
-  return item.watchedDate ?? item.date ?? null;
+function getRecentDate(film: UserFilm) {
+  return film.watchedEvents[0]?.date ?? null;
 }
 
-function buildOverviewData(items: EnrichedLetterboxdFilm[]): OverviewData {
-  const genreCounts = new Map<string, number>();
-  const languageCounts = new Map<string, number>();
-  const recentDiary: RecentDiaryEntry[] = [];
+function buildOverviewData(importedItems: UserFilm[]): OverviewData {
+  const tagCounts = new Map<string, number>();
+  const recentWatchHistory: RecentWatchEntry[] = [];
 
   let diaryCount = 0;
   let ratedCount = 0;
   let tmdbMatchedCount = 0;
+  let watchlistCount = 0;
   let ratingSum = 0;
   let runtimeSum = 0;
   let runtimeCount = 0;
 
-  items.forEach((item, index) => {
-    if (item.source === 'diary') {
-      diaryCount += 1;
-      recentDiary.push({ item, index });
+  console.log('imported items: ', importedItems);
+
+  importedItems.forEach((film, index) => {
+    if (film.inWatchlist) {
+      watchlistCount += 1;
     }
 
-    if (typeof item.rating === 'number') {
+    diaryCount += film.watchedEvents.length;
+
+    if (film.rating != null) {
       ratedCount += 1;
-      ratingSum += item.rating;
+      ratingSum += film.rating;
     }
 
-    const runtime = item.tmdb?.runtime;
-    if (typeof runtime === 'number') {
-      runtimeSum += runtime;
+    if (film.runtime != null) {
+      runtimeSum += film.runtime;
       runtimeCount += 1;
     }
-
-    if (item.tmdb || item.film) {
+    if (film.cached || film.runtime != null) {
       tmdbMatchedCount += 1;
     }
 
-    for (const genre of item.tmdb?.genres ?? []) {
-      genreCounts.set(genre.name, (genreCounts.get(genre.name) ?? 0) + 1);
-    }
+    for (const event of film.watchedEvents) {
+      recentWatchHistory.push({ film, index });
 
-    for (const language of item.tmdb?.spoken_languages ?? []) {
-      const name = language.english_name || language.name;
-      languageCounts.set(name, (languageCounts.get(name) ?? 0) + 1);
+      for (const tag of event.tags) {
+        tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
+      }
     }
   });
 
-  recentDiary.sort((left, right) => {
+  recentWatchHistory.sort((left, right) => {
     const dateDelta =
-      parseDateScore(getRecentDate(right.item)) - parseDateScore(getRecentDate(left.item));
+      parseDateScore(getRecentDate(right.film)) - parseDateScore(getRecentDate(left.film));
     if (dateDelta !== 0) return dateDelta;
     return right.index - left.index;
   });
 
-  const topGenres = Array.from(genreCounts.entries())
-    .sort((left, right) => right[1] - left[1])
-    .slice(0, 5)
-    .map(([name, count]) => ({ name, count }));
-
-  const topLanguages = Array.from(languageCounts.entries())
+  const topTags = Array.from(tagCounts.entries())
     .sort((left, right) => right[1] - left[1])
     .slice(0, 5)
     .map(([name, count]) => ({ name, count }));
 
   return {
-    importedCount: items.length,
+    importedCount: importedItems.length,
     diaryCount,
     ratedCount,
     tmdbMatchedCount,
+    watchlistCount,
     averageRating: ratedCount ? ratingSum / ratedCount : null,
     averageRuntime: runtimeCount ? runtimeSum / runtimeCount : null,
-    topGenres,
-    topLanguages,
-    recentDiary: recentDiary.slice(0, 4).map(({ item }) => item),
+    topTags,
+    recentWatchHistory: recentWatchHistory.slice(0, 4),
   };
 }
 
@@ -155,6 +143,7 @@ export default function OverviewSection({ importedItems }: OverviewSectionProps)
             <StatCard label="Imported" value={String(overview.importedCount)} />
             <StatCard label="Diary entries" value={String(overview.diaryCount)} />
             <StatCard label="Rated entries" value={String(overview.ratedCount)} />
+            <StatCard label="Watchlist" value={String(overview.watchlistCount)} />
             <StatCard label="Average rating" value={formatRating(overview.averageRating)} />
           </div>
 
@@ -169,10 +158,10 @@ export default function OverviewSection({ importedItems }: OverviewSectionProps)
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="rounded-3xl border border-border/70 bg-white/80 p-4 shadow-sm">
-              <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Top genres</p>
+              <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Top tags</p>
               <div className="mt-3 space-y-2">
-                {overview.topGenres.length ? (
-                  overview.topGenres.map((item, index) => (
+                {overview.topTags.length ? (
+                  overview.topTags.map((item, index) => (
                     <div
                       key={`${item.name}-${index}`}
                       className="flex items-center justify-between gap-3"
@@ -182,26 +171,28 @@ export default function OverviewSection({ importedItems }: OverviewSectionProps)
                     </div>
                   ))
                 ) : (
-                  <p className="text-sm text-slate-500">No genre data yet.</p>
+                  <p className="text-sm text-slate-500">No tag data yet.</p>
                 )}
               </div>
             </div>
 
             <div className="rounded-3xl border border-border/70 bg-white/80 p-4 shadow-sm">
-              <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Top languages</p>
+              <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Recent watches</p>
               <div className="mt-3 space-y-2">
-                {overview.topLanguages.length ? (
-                  overview.topLanguages.map((item, index) => (
+                {overview.recentWatchHistory.length ? (
+                  overview.recentWatchHistory.map(({ film }, index) => (
                     <div
-                      key={`${item.name}-${index}`}
-                      className="flex items-center justify-between gap-3"
+                      key={`${film.name}-${index}`}
+                      className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50/70 px-3 py-2"
                     >
-                      <span className="text-sm font-medium text-slate-800">{item.name}</span>
-                      <span className="text-sm text-slate-500">{item.count}</span>
+                      <span className="text-sm font-medium text-slate-800">{film.name}</span>
+                      <span className="text-sm text-slate-500">
+                        {film.year || '—'} · {formatRating(film.rating)}
+                      </span>
                     </div>
                   ))
                 ) : (
-                  <p className="text-sm text-slate-500">No language data yet.</p>
+                  <p className="text-sm text-slate-500">No watch history yet.</p>
                 )}
               </div>
             </div>
@@ -217,14 +208,13 @@ export default function OverviewSection({ importedItems }: OverviewSectionProps)
               </div>
             </div>
 
-            {overview.recentDiary.length ? (
+            {overview.recentWatchHistory.length ? (
               <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                {overview.recentDiary.map((item) => {
-                  const posterUrl = getPosterUrl(item);
-                  const linkHref = item.letterboxdUri;
-                  const releaseYear = item.year ?? item.film?.release_date?.slice(0, 4) ?? '—';
-                  const rating = item.rating == null ? 'No rating' : `${item.rating.toFixed(1)}/5`;
-                  const recentDate = getRecentDate(item);
+                {overview.recentWatchHistory.map(({ film }) => {
+                  const linkHref = film.letterboxdUri;
+                  const releaseYear = film.year ?? '—';
+                  const rating = film.rating == null ? 'No rating' : `${film.rating.toFixed(1)}/5`;
+                  const recentDate = getRecentDate(film);
                   const watchedDate = recentDate
                     ? new Date(recentDate).toLocaleDateString(undefined, {
                         month: 'short',
@@ -235,21 +225,13 @@ export default function OverviewSection({ importedItems }: OverviewSectionProps)
 
                   const card = (
                     <div className="group overflow-hidden rounded-[1.6rem] border border-border/70 bg-white/85 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
-                      <div className="relative aspect-2/3 bg-slate-100">
-                        {posterUrl ? (
-                          <Image
-                            src={posterUrl}
-                            alt={`${item.title} poster`}
-                            fill
-                            sizes="(max-width: 1280px) 50vw, 25vw"
-                            className="object-cover transition-transform duration-300 group-hover:scale-[1.03]"
-                            loading="lazy"
-                          />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center bg-[linear-gradient(180deg,rgba(23,23,23,0.9),rgba(71,85,105,0.85))] px-4 text-center">
-                            <p className="text-sm font-medium text-white/85">No poster available</p>
-                          </div>
-                        )}
+                      <div className="flex aspect-2/3 items-center justify-center bg-[linear-gradient(180deg,rgba(23,23,23,0.9),rgba(71,85,105,0.85))] px-4 text-center">
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.22em] text-white/60">
+                            Letterboxd
+                          </p>
+                          <p className="mt-2 text-lg font-semibold text-white/90">{film.name}</p>
+                        </div>
                       </div>
 
                       <div className="space-y-2 p-4">
@@ -258,7 +240,7 @@ export default function OverviewSection({ importedItems }: OverviewSectionProps)
                             {watchedDate}
                           </p>
                           <h4 className="mt-1 line-clamp-2 text-base font-semibold tracking-tight text-slate-900">
-                            {item.title}
+                            {film.name}
                           </h4>
                         </div>
 
@@ -267,7 +249,9 @@ export default function OverviewSection({ importedItems }: OverviewSectionProps)
                             {releaseYear}
                           </span>
                           <span className="rounded-full bg-slate-100 px-2.5 py-1">{rating}</span>
-                          {item.rewatch && (
+                          {film.watchedEvents.some(
+                            (event: (typeof film.watchedEvents)[number]) => event.rewatch
+                          ) && (
                             <span className="rounded-full bg-amber-100 px-2.5 py-1 text-amber-900">
                               Rewatch
                             </span>
@@ -282,17 +266,17 @@ export default function OverviewSection({ importedItems }: OverviewSectionProps)
                   );
 
                   if (!linkHref) {
-                    return <div key={`${item.title}-${watchedDate}`}>{card}</div>;
+                    return <div key={`${film.name}-${watchedDate}`}>{card}</div>;
                   }
 
                   return (
                     <a
-                      key={`${item.title}-${watchedDate}`}
+                      key={`${film.name}-${watchedDate}`}
                       href={linkHref}
                       target="_blank"
                       rel="noreferrer"
                       className="block"
-                      aria-label={`Open ${item.title} on Letterboxd`}
+                      aria-label={`Open ${film.name} on Letterboxd`}
                     >
                       {card}
                     </a>
