@@ -6,6 +6,8 @@ import OverviewSection from './sections/OverviewSection';
 import type { UserFilm } from '@/types/statistics';
 import StatsSection from './sections/StatsSection';
 import CastSection from './sections/CastSection';
+import TimelineSection from './sections/TimelineSection';
+import RecentsSection from './sections/RecentsSection';
 
 export default function Home() {
   const [importedItems, setImportedItems] = useState<UserFilm[] | null>(null);
@@ -44,6 +46,8 @@ export default function Home() {
           {hasImportedData && (
             <>
               <OverviewSection importedItems={importedItems} />
+              <TimelineSection importedItems={importedItems} />
+              <RecentsSection importedItems={importedItems} />
               <CastSection importedItems={importedItems} />
               <StatsSection importedItems={importedItems} />
             </>

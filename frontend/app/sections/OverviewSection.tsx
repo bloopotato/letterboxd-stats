@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react';
 import type { UserFilm } from '@/types/statistics';
+import OverviewCard from '../components/OverviewCard';
 
 type OverviewSectionProps = {
   importedItems: UserFilm[];
@@ -23,6 +24,7 @@ type OverviewData = {
   ratedCount: number;
   tmdbMatchedCount: number;
   watchlistCount: number;
+  runtimeSum: number;
   averageRating: number | null;
   averageRuntime: number | null;
   topTags: RankedItem[];
@@ -42,8 +44,12 @@ function formatRating(value: number | null) {
   return value == null ? '—' : value.toFixed(2);
 }
 
-function formatRuntime(value: number | null) {
-  return value == null ? '—' : `${Math.round(value)} min`;
+function formatRuntime(value: number | null, unit: 'min' | 'h' = 'h') {
+  if (value == null) return '—';
+  if (unit === 'h') {
+    return `${(value / 60).toFixed(1)}`;
+  }
+  return `${Math.round(value)}`;
 }
 
 function parseDateScore(value?: string | null) {
@@ -118,6 +124,7 @@ function buildOverviewData(importedItems: UserFilm[]): OverviewData {
     ratedCount,
     tmdbMatchedCount,
     watchlistCount,
+    runtimeSum,
     averageRating: ratedCount ? ratingSum / ratedCount : null,
     averageRuntime: runtimeCount ? runtimeSum / runtimeCount : null,
     topTags,
@@ -134,17 +141,15 @@ export default function OverviewSection({ importedItems }: OverviewSectionProps)
     <section className="flex flex-col w-full gap-4">
       {/* Header */}
       <div className="">
-        <h2 className="text-4xl font-semibold tracking-tight">Overview of your stats</h2>
+        <h2 className="text-4xl font-semibold tracking-tight">In total, you&apos;ve seen...</h2>
       </div>
 
       {hasItems && (
         <div className="mt-5 space-y-5">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <StatCard label="Imported" value={String(overview.importedCount)} />
-            <StatCard label="Diary entries" value={String(overview.diaryCount)} />
-            <StatCard label="Rated entries" value={String(overview.ratedCount)} />
-            <StatCard label="Watchlist" value={String(overview.watchlistCount)} />
-            <StatCard label="Average rating" value={formatRating(overview.averageRating)} />
+          <div className="grid gap-4 grid-cols-3">
+            <OverviewCard title="movies" value={String(overview.importedCount)} />
+            <OverviewCard title="hours" value={formatRuntime(overview.runtimeSum, 'h')} />
+            <OverviewCard title="diary entries" value={String(overview.diaryCount)} />
           </div>
 
           <div className="flex flex-wrap gap-2 text-xs text-slate-500">
@@ -196,96 +201,6 @@ export default function OverviewSection({ importedItems }: OverviewSectionProps)
                 )}
               </div>
             </div>
-          </div>
-
-          <div>
-            <div className="flex items-end justify-between gap-4">
-              <div>
-                <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Recent diary</p>
-                <h3 className="mt-1 text-lg font-semibold tracking-tight text-slate-900">
-                  Latest 4 entries
-                </h3>
-              </div>
-            </div>
-
-            {overview.recentWatchHistory.length ? (
-              <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                {overview.recentWatchHistory.map(({ film }) => {
-                  const linkHref = film.letterboxdUri;
-                  const releaseYear = film.year ?? '—';
-                  const rating = film.rating == null ? 'No rating' : `${film.rating.toFixed(1)}/5`;
-                  const recentDate = getRecentDate(film);
-                  const watchedDate = recentDate
-                    ? new Date(recentDate).toLocaleDateString(undefined, {
-                        month: 'short',
-                        day: 'numeric',
-                        year: 'numeric',
-                      })
-                    : 'Recent diary entry';
-
-                  const card = (
-                    <div className="group overflow-hidden rounded-[1.6rem] border border-border/70 bg-white/85 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
-                      <div className="flex aspect-2/3 items-center justify-center bg-[linear-gradient(180deg,rgba(23,23,23,0.9),rgba(71,85,105,0.85))] px-4 text-center">
-                        <div>
-                          <p className="text-xs uppercase tracking-[0.22em] text-white/60">
-                            Letterboxd
-                          </p>
-                          <p className="mt-2 text-lg font-semibold text-white/90">{film.name}</p>
-                        </div>
-                      </div>
-
-                      <div className="space-y-2 p-4">
-                        <div>
-                          <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">
-                            {watchedDate}
-                          </p>
-                          <h4 className="mt-1 line-clamp-2 text-base font-semibold tracking-tight text-slate-900">
-                            {film.name}
-                          </h4>
-                        </div>
-
-                        <div className="flex flex-wrap gap-2 text-xs text-slate-600">
-                          <span className="rounded-full bg-slate-100 px-2.5 py-1">
-                            {releaseYear}
-                          </span>
-                          <span className="rounded-full bg-slate-100 px-2.5 py-1">{rating}</span>
-                          {film.watchedEvents.some(
-                            (event: (typeof film.watchedEvents)[number]) => event.rewatch
-                          ) && (
-                            <span className="rounded-full bg-amber-100 px-2.5 py-1 text-amber-900">
-                              Rewatch
-                            </span>
-                          )}
-                        </div>
-
-                        <p className="text-xs text-slate-500">
-                          Click to open this entry on Letterboxd.
-                        </p>
-                      </div>
-                    </div>
-                  );
-
-                  if (!linkHref) {
-                    return <div key={`${film.name}-${watchedDate}`}>{card}</div>;
-                  }
-
-                  return (
-                    <a
-                      key={`${film.name}-${watchedDate}`}
-                      href={linkHref}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="block"
-                      aria-label={`Open ${film.name} on Letterboxd`}
-                    >
-                      {card}
-                    </a>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="mt-4 text-sm text-slate-500">No diary entries yet.</p>
-            )}
           </div>
         </div>
       )}

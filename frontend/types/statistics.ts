@@ -18,6 +18,7 @@ export interface UserFilm {
   // Non-letterboxd data
   tmdbId: number | null;
   runtime: number | null;
+  posterPath: string | null;
 
   cached: boolean;
 }

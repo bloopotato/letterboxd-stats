@@ -1,7 +1,7 @@
 @import 'tailwindcss';
 
 :root {
-  --background: #1d201f;
+  --background: #0c0c16;
   --foreground: #ffeaee;
 
   --secondary: #0081a7;
@@ -24,21 +24,20 @@
 @media (prefers-color-scheme: dark) {
   :root {
     /* Base */
-    --background: #1d201f;
+    --background: #0c0c16;
     --foreground: #ffeaee;
 
     /* Surfaces */
-    --card: #343a40;
+    --card: #141b2a;
     --muted: #d4c4ca;
-    --border: #3a3d3b;
+    --border: #202531;
 
     /* Brand / Accents */
     --primary: #f15946; /* Letterboxd orange */
     --secondary: #007f5f; /* Letterboxd blue */
     --tertiary: #0081a7; /* Letterboxd green */
 
-    /* Extra accent */
-    --subtitle: rgb(100 116 139); /* soft magenta */
+    --subtitle: #37404f;
   }
 }
 

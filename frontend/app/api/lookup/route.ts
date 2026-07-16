@@ -490,6 +490,7 @@ export async function POST(request: Request) {
           ...film,
           tmdbId: match.id,
           runtime: match.runtime ?? null,
+          posterPath: match.poster_path ?? null,
           cached: true,
         });
       } else {
@@ -497,6 +498,7 @@ export async function POST(request: Request) {
           ...film,
           tmdbId: null,
           runtime: null,
+          posterPath: null,
           cached: false,
         });
 
