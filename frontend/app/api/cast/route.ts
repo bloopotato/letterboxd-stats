@@ -66,13 +66,13 @@ export async function POST(request: Request) {
     const rows = await fetchSupabaseRpc<PersonStats>('top_people_for_movies', {
       movie_ids: tmdbIds,
       release_years: years.length ? years : null,
-      limit_count: 10,
+      limit_count: 50,
     });
 
     console.log('[RPC top_people_for_movies INPUT]', {
       movie_ids: tmdbIds,
       release_years: years.length ? years : null,
-      limit_count: 10,
+      limit_count: 50,
     });
 
     console.log('[RPC top_people_for_movies OUTPUT]', rows);

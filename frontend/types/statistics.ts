@@ -38,6 +38,7 @@ export interface PersonStats {
   name: string;
   count: number;
   movies: CastMovie[];
+  profile_path: string | null;
 }
 
 export interface CastStats {

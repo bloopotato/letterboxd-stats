@@ -141,7 +141,7 @@ export default function OverviewSection({ importedItems }: OverviewSectionProps)
     <section className="flex flex-col w-full gap-4">
       {/* Header */}
       <div className="">
-        <h2 className="text-4xl font-semibold tracking-tight">In total, you&apos;ve seen...</h2>
+        <h1 className="text-4xl font-semibold tracking-tight">In total, you&apos;ve seen...</h1>
       </div>
 
       {hasItems && (

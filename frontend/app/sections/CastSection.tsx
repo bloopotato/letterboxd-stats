@@ -1,7 +1,10 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import type { UserFilm, CastStats } from '@/types/statistics';
+import type { UserFilm, CastStats, PersonStats } from '@/types/statistics';
+import PersonCard from '../components/PersonCard';
+import PersonModal from '../components/PersonModal';
+import { motion, AnimatePresence } from 'framer-motion';
 
 type CastSectionProps = {
   importedItems: UserFilm[] | null;
@@ -29,6 +32,24 @@ export default function CastSection({ importedItems }: CastSectionProps) {
   const [selectedYears, setSelectedYears] = useState<number[] | null>(null);
   const items = useMemo(() => importedItems ?? [], [importedItems]);
   const hasItems = items.length > 0;
+  const [visibleCast, setVisibleCast] = useState(5);
+  const [prevVisibleCast, setPrevVisibleCast] = useState(5);
+  const [visibleDirectors, setVisibleDirectors] = useState(5);
+  const [prevVisibleDirectors, setPrevVisibleDirectors] = useState(5);
+  const [selectedPerson, setSelectedPerson] = useState<{
+    person: PersonStats;
+    films: UserFilm[];
+  } | null>(null);
+
+  const filmsByTmdbId = useMemo(
+    () =>
+      new Map(
+        items
+          .filter((film): film is UserFilm & { tmdbId: number } => film.tmdbId != null)
+          .map((film) => [film.tmdbId, film])
+      ),
+    [items]
+  );
 
   // Compute available diary years from diary-only items.
   const availableYears = useMemo(() => {
@@ -122,20 +143,8 @@ export default function CastSection({ importedItems }: CastSectionProps) {
   }
 
   return (
-    <section className="rounded-4xl border border-border/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.9),rgba(244,239,229,0.94))] p-5 shadow-sm">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Cast</p>
-          <h2 className="mt-1 text-xl font-semibold tracking-tight text-slate-900">
-            Top billed people
-          </h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Derived from TMDB credits in the imported films.
-          </p>
-        </div>
-        {loading && <p className="text-sm text-slate-500">Refreshing…</p>}
-      </div>
-
+    <section className="flex flex-col gap-4">
+      <h1 className="text-4xl font-semibold tracking-tight">Cast & Directors</h1>
       {availableYears.length > 0 && (
         <div className="mt-4 flex flex-wrap gap-2">
           <button
@@ -169,6 +178,9 @@ export default function CastSection({ importedItems }: CastSectionProps) {
           })}
         </div>
       )}
+      <div className="flex items-center justify-between gap-4">
+        {loading && <p className="text-sm text-slate-500">Refreshing…</p>}
+      </div>
 
       {error && (
         <p className="mt-4 rounded-2xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
@@ -176,67 +188,157 @@ export default function CastSection({ importedItems }: CastSectionProps) {
 
       {hasItems && !error && stats && (
         <div className="mt-5 space-y-5">
-          <div className="grid gap-3 sm:grid-cols-3">
-            <StatCard label="Imported" value={String(stats.watchedCount)} />
-            <StatCard label="Top cast" value={String(stats.topCast.length)} />
-            <StatCard label="Directors" value={String(stats.topDirectors.length)} />
-          </div>
-
-          <div className="grid gap-4 lg:grid-cols-2">
-            <div className="rounded-3xl border border-border/70 bg-white/80 p-4 shadow-sm">
+          <div className="flex flex-col gap-4">
+            <div className="rounded-3xl border border-border/70 bg-card p-4 shadow-sm">
               <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Top cast</p>
-              <div className="mt-3 space-y-2">
+              <div className="mt-3">
                 {stats.topCast.length ? (
-                  stats.topCast.map((person) => (
-                    <div
-                      key={person.id}
-                      className="flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50/70 px-3 py-2"
+                  <>
+                    <motion.div
+                      layout
+                      transition={{
+                        layout: {
+                          duration: 0.35,
+                          ease: 'easeInOut',
+                        },
+                      }}
+                      className="grid grid-cols-5 gap-4"
                     >
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-slate-800">{person.name}</span>
-
-                        <span className="text-sm text-slate-500">{formatCount(person.count)}</span>
-                      </div>
-                      <div className="space-y-1 pl-1">
-                        {person.movies.slice(0, 10).map((movie) => (
-                          <p key={movie.id} className="text-xs text-slate-500">
-                            {movie.title} ({movie.year})
-                          </p>
+                      <AnimatePresence>
+                        {stats.topCast.slice(0, visibleCast).map((person) => (
+                          <motion.div
+                            key={person.id}
+                            layout
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.9 }}
+                            transition={{ duration: 0.25 }}
+                          >
+                            <PersonCard
+                              person={person}
+                              onClick={() =>
+                                setSelectedPerson({
+                                  person,
+                                  films: person.movies.flatMap((movie) => {
+                                    const film = filmsByTmdbId.get(movie.id);
+                                    return film ? [film] : [];
+                                  }),
+                                })
+                              }
+                            />
+                          </motion.div>
                         ))}
+                      </AnimatePresence>
+                    </motion.div>
 
-                        {person.movies.length > 10 && (
-                          <p className="text-xs text-slate-400">
-                            +{person.movies.length - 10} more
-                          </p>
-                        )}
-                      </div>
+                    <div className="mt-4 flex justify-center gap-3">
+                      {visibleCast > 5 && (
+                        <button
+                          onClick={() => setVisibleCast(5)}
+                          className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-100"
+                        >
+                          Show less
+                        </button>
+                      )}
+
+                      {visibleCast < stats.topCast.length && (
+                        <button
+                          onClick={() => {
+                            if (visibleCast === 5 && prevVisibleCast > 5) {
+                              setVisibleCast(prevVisibleCast);
+                            } else {
+                              setVisibleCast((prev) => {
+                                const next = Math.min(stats.topCast.length, prev + 10);
+                                setPrevVisibleCast(next);
+                                return next;
+                              });
+                            }
+                          }}
+                          className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-100"
+                        >
+                          Show more
+                        </button>
+                      )}
                     </div>
-                  ))
+                  </>
                 ) : (
                   <p className="text-sm text-slate-500">No cast data yet.</p>
                 )}
               </div>
             </div>
 
-            <div className="rounded-3xl border border-border/70 bg-white/80 p-4 shadow-sm">
-              <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Top directors</p>
-              <div className="mt-3 space-y-2">
+            <div className="rounded-3xl border border-border/70 bg-card p-4 shadow-sm">
+              <p className="text-xs uppercase tracking-[0.22em] text-subtitle">Top directors</p>
+              <div className="mt-3">
                 {stats.topDirectors.length ? (
-                  stats.topDirectors.map((person) => (
-                    <div key={person.id} className="flex items-center justify-between gap-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium">{person.name}</span>
-                        <span className="text-sm text-slate-500">{formatCount(person.count)}</span>
-                      </div>
-                      <div className="space-y-1 pl-1">
-                        {person.movies.map((movie) => (
-                          <p key={movie.id} className="text-xs text-slate-500">
-                            {movie.title} ({movie.year})
-                          </p>
+                  <>
+                    <motion.div
+                      layout
+                      transition={{
+                        layout: {
+                          duration: 0.35,
+                          ease: 'easeInOut',
+                        },
+                      }}
+                      className="grid grid-cols-5 gap-4"
+                    >
+                      <AnimatePresence>
+                        {stats.topDirectors.slice(0, visibleDirectors).map((person) => (
+                          <motion.div
+                            key={person.id}
+                            layout
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.9 }}
+                            transition={{ duration: 0.25 }}
+                          >
+                            <PersonCard
+                              person={person}
+                              onClick={() =>
+                                setSelectedPerson({
+                                  person,
+                                  films: person.movies.flatMap((movie) => {
+                                    const film = filmsByTmdbId.get(movie.id);
+                                    return film ? [film] : [];
+                                  }),
+                                })
+                              }
+                            />
+                          </motion.div>
                         ))}
-                      </div>
+                      </AnimatePresence>
+                    </motion.div>
+
+                    <div className="mt-4 flex justify-center gap-3">
+                      {visibleDirectors > 5 && (
+                        <button
+                          onClick={() => setVisibleDirectors(5)}
+                          className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-100"
+                        >
+                          Show less
+                        </button>
+                      )}
+
+                      {visibleDirectors < stats.topDirectors.length && (
+                        <button
+                          onClick={() => {
+                            if (visibleDirectors === 5 && prevVisibleDirectors > 5) {
+                              setVisibleDirectors(prevVisibleDirectors);
+                            } else {
+                              setVisibleDirectors((prev) => {
+                                const next = Math.min(stats.topDirectors.length, prev + 10);
+                                setPrevVisibleDirectors(next);
+                                return next;
+                              });
+                            }
+                          }}
+                          className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-100"
+                        >
+                          Show more
+                        </button>
+                      )}
                     </div>
-                  ))
+                  </>
                 ) : (
                   <p className="text-sm text-slate-500">No director data yet.</p>
                 )}
@@ -248,6 +350,13 @@ export default function CastSection({ importedItems }: CastSectionProps) {
 
       {!hasItems && !loading && !error && (
         <p className="mt-4 text-sm text-slate-500">Import a ZIP export to populate cast stats.</p>
+      )}
+      {selectedPerson && (
+        <PersonModal
+          person={selectedPerson.person}
+          films={selectedPerson.films}
+          onClose={() => setSelectedPerson(null)}
+        />
       )}
     </section>
   );

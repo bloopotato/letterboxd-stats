@@ -21,8 +21,8 @@ function getRecentWatchedEvents(films: UserFilm[], limit = 4) {
 export default function RecentsSection({ importedItems }: { importedItems: UserFilm[] }) {
   const recents = getRecentWatchedEvents(importedItems);
   return (
-    <div>
-      <h1>Your Recents</h1>
+    <section className="flex flex-col gap-4">
+      <h1 className="text-4xl font-semibold tracking-tight">Your Recents</h1>
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         {recents.map(({ film, watchedEvent }) => (
           <FilmCard
@@ -32,6 +32,6 @@ export default function RecentsSection({ importedItems }: { importedItems: UserF
           />
         ))}
       </div>
-    </div>
+    </section>
   );
 }

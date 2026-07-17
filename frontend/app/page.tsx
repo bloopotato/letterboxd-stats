@@ -46,8 +46,8 @@ export default function Home() {
           {hasImportedData && (
             <>
               <OverviewSection importedItems={importedItems} />
-              <TimelineSection importedItems={importedItems} />
               <RecentsSection importedItems={importedItems} />
+              <TimelineSection importedItems={importedItems} />
               <CastSection importedItems={importedItems} />
               <StatsSection importedItems={importedItems} />
             </>
