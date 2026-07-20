@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { CastStats, PersonStats } from '@/types/statistics';
+import { RpcStats, GenreStats, PersonStats } from '@/types/statistics';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -54,20 +54,28 @@ export async function POST(request: Request) {
     );
 
     if (!tmdbIds.length) {
-      const emptyStats: CastStats = {
+      const emptyStats: RpcStats = {
         watchedCount: items.length,
         topCast: [],
         topDirectors: [],
+        topGenres: [],
       };
 
       return NextResponse.json({ ok: true, stats: emptyStats });
     }
 
-    const rows = await fetchSupabaseRpc<PersonStats>('top_people_for_movies', {
-      movie_ids: tmdbIds,
-      release_years: years.length ? years : null,
-      limit_count: 50,
-    });
+    const [peopleRows, genreRows] = await Promise.all([
+      fetchSupabaseRpc<PersonStats>('top_people_for_movies', {
+        movie_ids: tmdbIds,
+        release_years: years.length ? years : null,
+        limit_count: 50,
+      }),
+      fetchSupabaseRpc<GenreStats>('top_genres_for_movies', {
+        movie_ids: tmdbIds,
+        release_years: years.length ? years : null,
+        limit_count: 50,
+      }),
+    ]);
 
     console.log('[RPC top_people_for_movies INPUT]', {
       movie_ids: tmdbIds,
@@ -75,15 +83,16 @@ export async function POST(request: Request) {
       limit_count: 50,
     });
 
-    console.log('[RPC top_people_for_movies OUTPUT]', rows);
+    console.log('[RPC top_people_for_movies OUTPUT]', peopleRows);
 
-    const topCast = rows.filter((row) => row.category === 'cast');
-    const topDirectors = rows.filter((row) => row.category === 'director');
+    const topCast = peopleRows.filter((row) => row.category === 'cast');
+    const topDirectors = peopleRows.filter((row) => row.category === 'director');
 
-    const stats: CastStats = {
+    const stats: RpcStats = {
       watchedCount: items.length,
       topCast,
       topDirectors,
+      topGenres: genreRows,
     };
 
     return NextResponse.json({ ok: true, stats });

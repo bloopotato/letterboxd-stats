@@ -17,7 +17,7 @@ export default function PersonCard({
       onClick={onClick}
     >
       <div className="relative h-24 w-16 overflow-hidden rounded-xl">
-        <Image src={profileUrl} alt={person.name} fill className="object-cover" />
+        <Image src={profileUrl} alt={person.name} fill sizes="64px" className="object-cover" />
       </div>
 
       <p className="text-center text-sm font-medium text-slate-800">{person.name}</p>

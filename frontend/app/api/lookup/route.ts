@@ -26,6 +26,26 @@ type ExistingMovieLookup = {
   byFilmKey: Map<string, BulkMovieLookupResult>;
 };
 
+type MovieGenreRow = {
+  movie_id: number;
+  genre_id: number;
+};
+
+async function fetchSupabaseRows<T>(table: string, query: string): Promise<T[]> {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE) return [];
+
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}${query}`, {
+    headers: {
+      apikey: SUPABASE_SERVICE_ROLE,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE}`,
+    },
+  });
+
+  if (!response.ok) return [];
+
+  return (await response.json()) as T[];
+}
+
 function normaliseUri(uri: string | null | undefined): string | null {
   if (typeof uri !== 'string') return null;
   const trimmed = uri.trim();
@@ -101,6 +121,33 @@ async function updateMovieLetterboxdUri(movieId: number, letterboxdUri: string) 
   if (!response.ok) {
     throw new Error(await response.text());
   }
+}
+
+async function fetchGenresByMovieId(movieIds: number[]) {
+  if (!movieIds.length) return new Map<number, string[]>();
+
+  const [genres, movieGenres] = await Promise.all([
+    fetchSupabaseRows<TMDBGenreRow>('tmdb_genres', '?select=id,name'),
+    fetchSupabaseRows<MovieGenreRow>(
+      'tmdb_movie_genres',
+      `?select=movie_id,genre_id&movie_id=in.(${movieIds.join(',')})`
+    ),
+  ]);
+
+  const genreById = new Map<number, string>(genres.map((genre) => [genre.id, genre.name]));
+  const genresByMovieId = new Map<number, string[]>();
+
+  for (const relation of movieGenres) {
+    const genreName = genreById.get(relation.genre_id);
+    if (!genreName) continue;
+
+    const current = genresByMovieId.get(relation.movie_id) ?? [];
+    if (!current.includes(genreName)) {
+      genresByMovieId.set(relation.movie_id, [...current, genreName]);
+    }
+  }
+
+  return genresByMovieId;
 }
 
 type TmdbUpsertCandidate = {
@@ -459,6 +506,7 @@ export async function POST(request: Request) {
     const missing: UserFilm[] = [];
     const tmdbUpserts: TmdbUpsertCandidate[] = [];
     const tmdbByKey = new Map<string, TMDBMovieDetails | null>();
+    const matchedMovieIds = new Set<number>();
     let uriMatchedCount = 0;
     let titleMatchedCount = 0;
 
@@ -486,11 +534,14 @@ export async function POST(request: Request) {
           existingMovies.byUri.set(uriKey, match);
         }
 
+        matchedMovieIds.add(match.id);
+
         enriched.push({
           ...film,
           tmdbId: match.id,
           runtime: match.runtime ?? null,
           posterPath: match.poster_path ?? null,
+          genreNames: [],
           cached: true,
         });
       } else {
@@ -499,6 +550,7 @@ export async function POST(request: Request) {
           tmdbId: null,
           runtime: null,
           posterPath: null,
+          genreNames: [],
           cached: false,
         });
 
@@ -557,6 +609,8 @@ export async function POST(request: Request) {
             movie: movieRow,
           });
 
+          matchedMovieIds.add(tmdb.id);
+
           await upsertMovieGraph(tmdb);
         } else if (key) {
           tmdbByKey.set(key, null);
@@ -567,6 +621,31 @@ export async function POST(request: Request) {
         }
       }
     );
+
+    const genresByMovieId = await fetchGenresByMovieId(Array.from(matchedMovieIds));
+
+    const enrichedWithGenres = enriched.map((film) => {
+      if (film.tmdbId == null) {
+        return film;
+      }
+
+      const genreNames = genresByMovieId.get(film.tmdbId) ?? [];
+
+      if (genreNames.length) {
+        return {
+          ...film,
+          genreNames,
+        };
+      }
+
+      const tmdbGenres =
+        tmdbByKey.get(movieKey(film.name) ?? '')?.genres?.map((genre) => genre.name) ?? [];
+
+      return {
+        ...film,
+        genreNames: tmdbGenres,
+      };
+    });
 
     // const fullResults: FullUserFilmResult[] = films.map((film) => {
     //   const key = movieKey(film.name);
@@ -605,7 +684,7 @@ export async function POST(request: Request) {
 
     console.log('lookup.analytics', {
       analytics,
-      films: enriched,
+      films: enrichedWithGenres,
       // fullResults,
       missing,
       tmdbUpserts,
@@ -613,7 +692,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       ok: true,
-      films: enriched, // fullResults, tmdbUpserts,
+      films: enrichedWithGenres, // fullResults, tmdbUpserts,
       analytics,
     });
   } catch (err) {

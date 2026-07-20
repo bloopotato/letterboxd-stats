@@ -48,8 +48,8 @@ export default function Home() {
               <OverviewSection importedItems={importedItems} />
               <RecentsSection importedItems={importedItems} />
               <TimelineSection importedItems={importedItems} />
-              <CastSection importedItems={importedItems} />
               <StatsSection importedItems={importedItems} />
+              <CastSection importedItems={importedItems} />
             </>
           )}
         </div>

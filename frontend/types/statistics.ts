@@ -14,6 +14,7 @@ export interface UserFilm {
   inWatchlist: boolean;
   rating: number | null;
   letterboxdUri: string | null;
+  genreNames: string[];
 
   // Non-letterboxd data
   tmdbId: number | null;
@@ -23,26 +24,36 @@ export interface UserFilm {
   cached: boolean;
 }
 
-// -------------------- CAST STATS -------------------
-
-export interface CastMovie {
+export interface StatsMovie {
   id: number;
   year: number;
   title: string;
   letterboxdUri: string | null;
 }
 
+// -------------------- CAST STATS -------------------
+
 export interface PersonStats {
   category: 'cast' | 'director';
   id: number;
   name: string;
   count: number;
-  movies: CastMovie[];
+  movies: StatsMovie[];
   profile_path: string | null;
 }
 
-export interface CastStats {
+// -------------------- GENRE STATS -------------------
+
+export interface GenreStats {
+  id: number;
+  name: string;
+  count: number;
+  movies: StatsMovie[];
+}
+
+export interface RpcStats {
   watchedCount: number;
   topCast: PersonStats[];
   topDirectors: PersonStats[];
+  topGenres: GenreStats[];
 }

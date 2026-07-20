@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import type { UserFilm, CastStats, PersonStats } from '@/types/statistics';
+import type { UserFilm, RpcStats, PersonStats } from '@/types/statistics';
 import PersonCard from '../components/PersonCard';
 import PersonModal from '../components/PersonModal';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -25,7 +25,7 @@ function StatCard({ label, value }: { label: string; value: string }) {
 }
 
 export default function CastSection({ importedItems }: CastSectionProps) {
-  const [stats, setStats] = useState<CastStats | null>(null);
+  const [stats, setStats] = useState<RpcStats | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /** Selected diary years (null = "All years") */
@@ -90,7 +90,7 @@ export default function CastSection({ importedItems }: CastSectionProps) {
       setError(null);
 
       try {
-        const response = await fetch('/api/cast', {
+        const response = await fetch('/api/stats', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           // send only diary items that match the selected diary years
@@ -104,7 +104,7 @@ export default function CastSection({ importedItems }: CastSectionProps) {
 
         const json = (await response.json()) as {
           ok: boolean;
-          stats?: CastStats;
+          stats?: RpcStats;
           error?: string;
         };
 

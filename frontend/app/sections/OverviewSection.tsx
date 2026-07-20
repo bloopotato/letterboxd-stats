@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import type { UserFilm } from '@/types/statistics';
-import OverviewCard from '../components/OverviewCard';
+import OverviewCard from '@/app/components/OverviewCard';
 
 type OverviewSectionProps = {
   importedItems: UserFilm[];
