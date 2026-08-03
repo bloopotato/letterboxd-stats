@@ -65,55 +65,113 @@ from jsonb_array_elements(entries) as e
     ) m on true;
 $$;
 
-create or replace function top_people_for_movies(
-  movie_ids bigint[],
-  release_years int[] default null,
-  limit_count int default 10
+
+CREATE OR REPLACE FUNCTION top_people_for_movies(
+  movie_ids bigint[]
 )
-returns table (
+RETURNS TABLE (
   category text,
   id bigint,
   name text,
-  count bigint
+  profile_path text,
+  count bigint,
+  movies jsonb
 )
-language sql
-stable
-as $$
-with filtered_movies as (
-  select m.id
-  from tmdb_movies m
-  where m.id = any(movie_ids)
-    and (
-      release_years is null
-      or cardinality(release_years) = 0
-      or extract(year from m.release_date)::int = any(release_years)
+LANGUAGE sql
+STABLE
+AS $$
+WITH filtered_movies AS (
+  SELECT m.id
+  FROM tmdb_movies m
+  WHERE m.id = ANY(movie_ids)
+),
+
+cast_people AS (
+  SELECT
+    p.id,
+    p.name,
+    p.profile_path,
+    COUNT(DISTINCT c.movie_id)::bigint AS count
+  FROM tmdb_credits c
+  JOIN filtered_movies fm ON fm.id = c.movie_id
+  JOIN tmdb_people p ON p.id = c.person_id
+  WHERE c.department = 'Acting'
+  GROUP BY p.id, p.name, p.profile_path
+  ORDER BY count DESC, p.name ASC
+  LIMIT 50
+),
+
+director_people AS (
+  SELECT
+    p.id,
+    p.name,
+    p.profile_path,
+    COUNT(DISTINCT c.movie_id)::bigint AS count
+  FROM tmdb_credits c
+  JOIN filtered_movies fm ON fm.id = c.movie_id
+  JOIN tmdb_people p ON p.id = c.person_id
+  WHERE c.department = 'Directing'
+    AND c.job = 'Director'
+  GROUP BY p.id, p.name, p.profile_path
+  ORDER BY count DESC, p.name ASC
+  LIMIT 50
+)
+
+SELECT
+  'cast'::text AS category,
+  cp.id,
+  cp.name,
+  cp.profile_path,
+  cp.count,
+  jsonb_agg(
+    jsonb_build_object(
+      'id', m.id,
+      'title', m.title,
+      'year', EXTRACT(YEAR FROM m.release_date)::int,
+      'letterboxdUri', m.letterboxd_uri
     )
-), cast_people as (
-  select
-    p.id,
-    p.name,
-    count(distinct c.movie_id)::bigint as count
-  from tmdb_credits c
-  join filtered_movies fm on fm.id = c.movie_id
-  join tmdb_people p on p.id = c.person_id
-  where c.department = 'Acting'
-  group by p.id, p.name
-  order by count desc, p.name asc
-  limit limit_count
-), director_people as (
-  select
-    p.id,
-    p.name,
-    count(distinct c.movie_id)::bigint as count
-  from tmdb_credits c
-  join filtered_movies fm on fm.id = c.movie_id
-  join tmdb_people p on p.id = c.person_id
-  where c.job = 'Director'
-  group by p.id, p.name
-  order by count desc, p.name asc
-  limit limit_count
-)
-select 'cast'::text as category, id, name, count from cast_people
-union all
-select 'director'::text as category, id, name, count from director_people;
+    ORDER BY m.release_date DESC
+  ) AS movies
+FROM cast_people cp
+JOIN tmdb_credits c
+  ON c.person_id = cp.id
+ AND c.department = 'Acting'
+JOIN tmdb_movies m
+  ON m.id = c.movie_id
+JOIN filtered_movies fm
+  ON fm.id = m.id
+GROUP BY cp.id, cp.name, cp.profile_path, cp.count
+
+UNION ALL
+
+SELECT
+  'director'::text AS category,
+  dp.id,
+  dp.name,
+  dp.profile_path,
+  dp.count,
+  jsonb_agg(
+    jsonb_build_object(
+      'id', m.id,
+      'title', m.title,
+      'year', EXTRACT(YEAR FROM m.release_date)::int,
+      'letterboxdUri', m.letterboxd_uri
+    )
+    ORDER BY m.release_date DESC
+  ) AS movies
+FROM director_people dp
+JOIN tmdb_credits c
+  ON c.person_id = dp.id
+ AND c.department = 'Directing'
+ AND c.job = 'Director'
+JOIN tmdb_movies m
+  ON m.id = c.movie_id
+JOIN filtered_movies fm
+  ON fm.id = m.id
+GROUP BY dp.id, dp.name, dp.profile_path, dp.count
+
+ORDER BY
+  category,
+  count DESC,
+  name ASC;
 $$;

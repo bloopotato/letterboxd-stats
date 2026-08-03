@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import type { UserFilm, WatchedEvent } from '@/types/statistics';
+import { RpcStats, type UserFilm, type WatchedEvent } from '@/types/statistics';
 import {
   ResponsiveContainer,
   BarChart,
@@ -41,7 +41,13 @@ function filmIdentity(film: UserFilm) {
   return film.tmdbId != null ? `tmdb:${film.tmdbId}` : `${film.name}|${film.year}`;
 }
 
-export default function StatsSection({ importedItems }: { importedItems: UserFilm[] }) {
+type StatsSectionProps = {
+  importedItems: UserFilm[];
+  stats: RpcStats | null;
+  loading: boolean;
+};
+
+export default function StatsSection({ importedItems, stats, loading }: StatsSectionProps) {
   const [timeframe, setTimeframe] = useState<Timeframe>('All');
   const [groupBy, setGroupBy] = useState<Grouping>('Year');
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null);

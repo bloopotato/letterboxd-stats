@@ -45,13 +45,6 @@ export async function POST(request: Request) {
     const tmdbIds = Array.from(
       new Set(items.map((item) => item.tmdbId).filter((id): id is number => typeof id === 'number'))
     );
-    const years = Array.from(
-      new Set(
-        (typedBody.years || typedBody.releaseYears || []).filter(
-          (year): year is number => typeof year === 'number'
-        )
-      )
-    );
 
     if (!tmdbIds.length) {
       const emptyStats: RpcStats = {
@@ -67,26 +60,22 @@ export async function POST(request: Request) {
     const [peopleRows, genreRows] = await Promise.all([
       fetchSupabaseRpc<PersonStats>('top_people_for_movies', {
         movie_ids: tmdbIds,
-        release_years: years.length ? years : null,
-        limit_count: 50,
       }),
       fetchSupabaseRpc<GenreStats>('top_genres_for_movies', {
         movie_ids: tmdbIds,
-        release_years: years.length ? years : null,
-        limit_count: 50,
       }),
     ]);
 
     console.log('[RPC top_people_for_movies INPUT]', {
       movie_ids: tmdbIds,
-      release_years: years.length ? years : null,
-      limit_count: 50,
     });
 
     console.log('[RPC top_people_for_movies OUTPUT]', peopleRows);
 
     const topCast = peopleRows.filter((row) => row.category === 'cast');
     const topDirectors = peopleRows.filter((row) => row.category === 'director');
+
+    console.log('[RPC DIRECTORS RETRIEVED]', topDirectors);
 
     const stats: RpcStats = {
       watchedCount: items.length,

@@ -27,12 +27,18 @@ export default function PersonModal({ person, films, onClose }: PersonModalProps
         <div className="flex items-start justify-between">
           <div className="flex gap-5">
             <div className="relative h-32 w-24 overflow-hidden rounded-2xl">
-              <Image src={profileUrl} alt={person.name} fill className="object-cover" />
+              <Image
+                src={profileUrl}
+                alt={person.name}
+                fill
+                sizes="96px"
+                className="object-cover"
+              />
             </div>
 
             <div>
               <h2 className="text-3xl font-bold">{person.name}</h2>
-              <p className="mt-2 text-slate-500">Appears in {person.count} watched films</p>
+              <p className="mt-2 text-slate-500">Appears in {films.length} watched films</p>
             </div>
           </div>
 

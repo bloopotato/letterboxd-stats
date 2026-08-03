@@ -8,6 +8,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 type CastSectionProps = {
   importedItems: UserFilm[] | null;
+  stats: RpcStats | null;
+  loading: boolean;
 };
 
 function formatCount(count: number) {
@@ -24,9 +26,71 @@ function StatCard({ label, value }: { label: string; value: string }) {
   );
 }
 
-export default function CastSection({ importedItems }: CastSectionProps) {
-  const [stats, setStats] = useState<RpcStats | null>(null);
-  const [loading, setLoading] = useState(false);
+function filterByWatchYears<T extends { movies: { id: number }[] }>(
+  people: T[],
+  selectedYears: number[] | null,
+  movieWatchYears: Map<number, Set<number>>
+) {
+  return people
+    .map((person) => {
+      const movies = person.movies.filter((movie) => {
+        const watchYears = movieWatchYears.get(movie.id);
+
+        // Film isn't in the user's watched films
+        if (!watchYears) return false;
+
+        // All years = any watched film
+        if (selectedYears === null) {
+          return true;
+        }
+
+        // Selected years = watched in at least one selected year
+        return selectedYears.some((year) => watchYears.has(year));
+      });
+
+      return {
+        ...person,
+        movies,
+        count: movies.length,
+      };
+    })
+    .filter((person) => person.count > 0)
+    .sort((a, b) => b.count - a.count);
+}
+
+function getFilmsForPerson(
+  person: PersonStats,
+  selectedYears: number[] | null,
+  filmsByTmdbId: Map<number, UserFilm>
+) {
+  return person.movies.flatMap((movie) => {
+    const film = filmsByTmdbId.get(movie.id);
+
+    if (!film || !film.watched) return [];
+
+    // All years: keep all diary entries
+    if (selectedYears === null) {
+      return [film];
+    }
+
+    // Only keep diary entries from the selected year(s)
+    const watchedEvents = film.watchedEvents.filter((event) =>
+      selectedYears.includes(new Date(event.date).getFullYear())
+    );
+
+    // Don't include the film if it has no diary entry in the selected year
+    if (watchedEvents.length === 0) return [];
+
+    return [
+      {
+        ...film,
+        watchedEvents,
+      },
+    ];
+  });
+}
+
+export default function CastSection({ importedItems, stats, loading }: CastSectionProps) {
   const [error, setError] = useState<string | null>(null);
   /** Selected diary years (null = "All years") */
   const [selectedYears, setSelectedYears] = useState<number[] | null>(null);
@@ -64,71 +128,6 @@ export default function CastSection({ importedItems }: CastSectionProps) {
     return [...years].sort((a, b) => b - a);
   }, [items]);
 
-  const visibleItems = useMemo(() => {
-    // All years
-    if (selectedYears === null) {
-      return items.filter((film) => film.watched);
-    }
-
-    // Specific years
-    return items.filter((film) => {
-      return film.watchedEvents.some((event) =>
-        selectedYears.includes(new Date(event.date).getFullYear())
-      );
-    });
-  }, [selectedYears, items]);
-
-  useEffect(() => {
-    if (!hasItems) {
-      return;
-    }
-
-    let cancelled = false;
-
-    async function loadCastStats() {
-      setLoading(true);
-      setError(null);
-
-      try {
-        const response = await fetch('/api/stats', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          // send only diary items that match the selected diary years
-          body: JSON.stringify({
-            items: visibleItems
-              .map((item) => ({ tmdbId: item.tmdbId }))
-              .filter((it) => it.tmdbId && typeof it.tmdbId === 'number'),
-          }),
-          cache: 'no-store',
-        });
-
-        const json = (await response.json()) as {
-          ok: boolean;
-          stats?: RpcStats;
-          error?: string;
-        };
-
-        if (!response.ok || !json.ok || !json.stats) {
-          throw new Error(json.error || 'Unable to load cast stats');
-        }
-
-        if (!cancelled) setStats(json.stats);
-      } catch (fetchError) {
-        if (!cancelled) {
-          setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    void loadCastStats();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [visibleItems, hasItems]);
-
   function toggleYear(year: number) {
     setSelectedYears((current) => {
       const currentYears = current ?? [];
@@ -141,6 +140,34 @@ export default function CastSection({ importedItems }: CastSectionProps) {
       return [...currentYears, year].sort((left, right) => right - left);
     });
   }
+
+  const movieWatchYears = useMemo(() => {
+    const map = new Map<number, Set<number>>();
+
+    for (const film of items) {
+      if (film.tmdbId == null || !film.watched) continue;
+
+      const years = new Set<number>();
+
+      for (const event of film.watchedEvents) {
+        years.add(new Date(event.date).getFullYear());
+      }
+
+      map.set(film.tmdbId, years);
+    }
+
+    return map;
+  }, [items]);
+
+  const filteredCast = useMemo(
+    () => filterByWatchYears(stats?.topCast ?? [], selectedYears, movieWatchYears),
+    [stats, selectedYears, movieWatchYears]
+  );
+
+  const filteredDirectors = useMemo(
+    () => filterByWatchYears(stats?.topDirectors ?? [], selectedYears, movieWatchYears),
+    [stats, selectedYears, movieWatchYears]
+  );
 
   return (
     <section className="flex flex-col gap-4">
@@ -192,7 +219,7 @@ export default function CastSection({ importedItems }: CastSectionProps) {
             <div className="rounded-3xl border border-border/70 bg-card p-4 shadow-sm">
               <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Top cast</p>
               <div className="mt-3">
-                {stats.topCast.length ? (
+                {filteredCast.length ? (
                   <>
                     <motion.div
                       layout
@@ -205,7 +232,7 @@ export default function CastSection({ importedItems }: CastSectionProps) {
                       className="grid grid-cols-5 gap-4"
                     >
                       <AnimatePresence>
-                        {stats.topCast.slice(0, visibleCast).map((person) => (
+                        {filteredCast.slice(0, visibleCast).map((person) => (
                           <motion.div
                             key={person.id}
                             layout
@@ -219,10 +246,7 @@ export default function CastSection({ importedItems }: CastSectionProps) {
                               onClick={() =>
                                 setSelectedPerson({
                                   person,
-                                  films: person.movies.flatMap((movie) => {
-                                    const film = filmsByTmdbId.get(movie.id);
-                                    return film ? [film] : [];
-                                  }),
+                                  films: getFilmsForPerson(person, selectedYears, filmsByTmdbId),
                                 })
                               }
                             />
@@ -241,14 +265,14 @@ export default function CastSection({ importedItems }: CastSectionProps) {
                         </button>
                       )}
 
-                      {visibleCast < stats.topCast.length && (
+                      {visibleCast < filteredCast.length && (
                         <button
                           onClick={() => {
                             if (visibleCast === 5 && prevVisibleCast > 5) {
                               setVisibleCast(prevVisibleCast);
                             } else {
                               setVisibleCast((prev) => {
-                                const next = Math.min(stats.topCast.length, prev + 10);
+                                const next = Math.min(filteredCast.length, prev + 10);
                                 setPrevVisibleCast(next);
                                 return next;
                               });
@@ -270,7 +294,7 @@ export default function CastSection({ importedItems }: CastSectionProps) {
             <div className="rounded-3xl border border-border/70 bg-card p-4 shadow-sm">
               <p className="text-xs uppercase tracking-[0.22em] text-subtitle">Top directors</p>
               <div className="mt-3">
-                {stats.topDirectors.length ? (
+                {filteredDirectors.length ? (
                   <>
                     <motion.div
                       layout
@@ -283,7 +307,7 @@ export default function CastSection({ importedItems }: CastSectionProps) {
                       className="grid grid-cols-5 gap-4"
                     >
                       <AnimatePresence>
-                        {stats.topDirectors.slice(0, visibleDirectors).map((person) => (
+                        {filteredDirectors.slice(0, visibleDirectors).map((person) => (
                           <motion.div
                             key={person.id}
                             layout
@@ -297,10 +321,7 @@ export default function CastSection({ importedItems }: CastSectionProps) {
                               onClick={() =>
                                 setSelectedPerson({
                                   person,
-                                  films: person.movies.flatMap((movie) => {
-                                    const film = filmsByTmdbId.get(movie.id);
-                                    return film ? [film] : [];
-                                  }),
+                                  films: getFilmsForPerson(person, selectedYears, filmsByTmdbId),
                                 })
                               }
                             />
@@ -319,14 +340,14 @@ export default function CastSection({ importedItems }: CastSectionProps) {
                         </button>
                       )}
 
-                      {visibleDirectors < stats.topDirectors.length && (
+                      {visibleDirectors < filteredDirectors.length && (
                         <button
                           onClick={() => {
                             if (visibleDirectors === 5 && prevVisibleDirectors > 5) {
                               setVisibleDirectors(prevVisibleDirectors);
                             } else {
                               setVisibleDirectors((prev) => {
-                                const next = Math.min(stats.topDirectors.length, prev + 10);
+                                const next = Math.min(filteredDirectors.length, prev + 10);
                                 setPrevVisibleDirectors(next);
                                 return next;
                               });
