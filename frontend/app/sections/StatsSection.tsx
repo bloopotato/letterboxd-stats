@@ -27,68 +27,94 @@ type GenreSlice = {
 };
 
 const GENRE_COLORS = [
-  '#0081a7',
-  '#f4a261',
-  '#2a9d8f',
-  '#e76f51',
-  '#6c7ae0',
-  '#f77f00',
-  '#3d5a80',
-  '#90be6d',
+  'var(--accent)',
+  'var(--accent-orange)',
+  'var(--accent-blue)',
+  '#8b9d77',
+  '#c7839d',
+  '#d2b66f',
+  '#8b83c7',
+  '#6ba9a1',
 ];
 
-function filmIdentity(film: UserFilm) {
-  return film.tmdbId != null ? `tmdb:${film.tmdbId}` : `${film.name}|${film.year}`;
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+function parseDate(date: string): number {
+  const timestamp = Date.parse(date);
+  return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp;
 }
+
+function filmIdentity(film: UserFilm): string {
+  return film.tmdbId != null ? `tmdb:${film.tmdbId}` : `${film.name}|${film.year ?? ''}`;
+}
+
+function normaliseGenres(genres: string[]): string[] {
+  return [...new Set(genres.map((genre) => genre.trim()).filter(Boolean))];
+}
+
+const tooltipStyle = {
+  backgroundColor: 'var(--surface)',
+  border: '1px solid var(--border)',
+  borderRadius: '0px',
+  color: 'var(--text)',
+  fontSize: '12px',
+};
+
+const selectClass =
+  'min-w-0 border-b border-border bg-transparent px-1 py-2 text-xs text-foreground outline-none transition-colors hover:border-accent focus:border-accent';
 
 export default function StatsSection({ importedItems }: { importedItems: UserFilm[] }) {
   const [timeframe, setTimeframe] = useState<Timeframe>('All');
   const [groupBy, setGroupBy] = useState<Grouping>('Year');
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
 
-  // Flatten all diary entries
-  const watchedEvents: WatchedEventWithFilm[] = useMemo(() => {
+  const watchedEvents = useMemo<WatchedEventWithFilm[]>(() => {
     return importedItems.flatMap((film) =>
-      film.watchedEvents.map((event) => ({
+      (film.watchedEvents ?? []).map((event) => ({
         ...event,
         film,
       }))
     );
   }, [importedItems]);
 
-  // Available years
   const years = useMemo(() => {
-    const set = new Set<number>();
+    const availableYears = new Set<number>();
 
     watchedEvents.forEach((event) => {
-      set.add(new Date(event.date).getFullYear());
+      const timestamp = parseDate(event.date);
+      if (timestamp === Number.NEGATIVE_INFINITY) return;
+
+      availableYears.add(new Date(timestamp).getFullYear());
     });
 
-    return [...set].sort((a, b) => b - a);
+    return [...availableYears].sort((a, b) => b - a);
   }, [watchedEvents]);
 
-  // Filter by selected year
   const filteredEvents = useMemo(() => {
     if (timeframe === 'All') return watchedEvents;
 
-    return watchedEvents.filter((event) => new Date(event.date).getFullYear() === timeframe);
+    return watchedEvents.filter((event) => {
+      const timestamp = parseDate(event.date);
+
+      return (
+        timestamp !== Number.NEGATIVE_INFINITY && new Date(timestamp).getFullYear() === timeframe
+      );
+    });
   }, [watchedEvents, timeframe]);
 
-  const genreData: GenreSlice[] = useMemo(() => {
+  const genreData = useMemo<GenreSlice[]>(() => {
     const counts = new Map<string, number>();
 
     filteredEvents.forEach(({ film }) => {
-      const uniqueGenres = new Set(
-        film.genreNames.map((genre) => genre.trim()).filter((genre) => genre.length > 0)
-      );
-
-      uniqueGenres.forEach((genre) => {
+      for (const genre of normaliseGenres(film.genreNames ?? [])) {
         counts.set(genre, (counts.get(genre) ?? 0) + 1);
-      });
+      }
     });
 
     return [...counts.entries()]
-      .sort((left, right) => right[1] - left[1])
+      .sort((a, b) => b[1] - a[1])
       .map(([label, watched], index) => ({
         label,
         watched,
@@ -108,182 +134,267 @@ export default function StatsSection({ importedItems }: { importedItems: UserFil
     const latestByFilm = new Map<string, WatchedEventWithFilm>();
 
     filteredEvents.forEach((event) => {
-      if (!event.film.genreNames.includes(activeSelectedGenre)) {
-        return;
-      }
+      const genres = normaliseGenres(event.film.genreNames ?? []);
+      if (!genres.includes(activeSelectedGenre)) return;
 
       const key = filmIdentity(event.film);
       const current = latestByFilm.get(key);
-      const eventTime = new Date(event.date).getTime();
-      const currentTime = current ? new Date(current.date).getTime() : Number.NEGATIVE_INFINITY;
 
-      if (!current || eventTime > currentTime) {
+      if (!current || parseDate(event.date) > parseDate(current.date)) {
         latestByFilm.set(key, event);
       }
     });
 
     return [...latestByFilm.values()]
-      .sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime())
+      .sort((a, b) => parseDate(b.date) - parseDate(a.date))
       .slice(0, 4);
   }, [activeSelectedGenre, filteredEvents]);
 
-  // Build chart data
   const chartData = useMemo(() => {
     const counts = new Map<string, number>();
 
-    // Month names in correct order
-    const monthNames = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-
-    const weekdayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
     filteredEvents.forEach((event) => {
-      const date = new Date(event.date);
+      const timestamp = parseDate(event.date);
+      if (timestamp === Number.NEGATIVE_INFINITY) return;
 
-      let key = '';
+      const date = new Date(timestamp);
+      let label: string;
 
       switch (groupBy) {
         case 'Year':
-          key = String(date.getFullYear());
+          label = String(date.getFullYear());
           break;
-
         case 'Month':
-          key = monthNames[date.getMonth()];
+          label = MONTHS[date.getMonth()];
           break;
-
         case 'Day':
-          key = weekdayNames[date.getDay()];
+          label = WEEKDAYS[date.getDay()];
           break;
       }
 
-      counts.set(key, (counts.get(key) ?? 0) + 1);
+      counts.set(label, (counts.get(label) ?? 0) + 1);
     });
 
     if (groupBy === 'Month') {
-      return monthNames.map((month) => ({
-        label: month,
-        watched: counts.get(month) ?? 0,
+      return MONTHS.map((label) => ({
+        label,
+        watched: counts.get(label) ?? 0,
       }));
     }
 
     if (groupBy === 'Day') {
-      return weekdayNames.map((day) => ({
-        label: day,
-        watched: counts.get(day) ?? 0,
+      return WEEKDAYS.map((label) => ({
+        label,
+        watched: counts.get(label) ?? 0,
       }));
     }
 
     return [...counts.entries()]
       .sort((a, b) => Number(a[0]) - Number(b[0]))
-      .map(([label, watched]) => ({
-        label,
-        watched,
-      }));
+      .map(([label, watched]) => ({ label, watched }));
   }, [filteredEvents, groupBy]);
 
-  const totalGenreWatched = genreData.reduce((sum, item) => sum + item.watched, 0);
+  const totalGenreWatched = genreData.reduce((sum, genre) => sum + genre.watched, 0);
 
   const activeGenreColor =
-    genreData.find((genre) => genre.label === activeSelectedGenre)?.color ?? GENRE_COLORS[0];
+    genreData.find((genre) => genre.label === activeSelectedGenre)?.color ?? 'var(--accent)';
 
   return (
-    <section className="space-y-6">
-      <div className="flex items-end justify-between gap-4">
+    <section id="statistics" className="flex w-full flex-col gap-8 text-foreground">
+      {/* Editorial heading */}
+      <header className="flex flex-col justify-between gap-5 border-b border-border pb-6 sm:flex-row sm:items-end">
         <div>
-          <h2 className="text-2xl font-bold">Films Watched</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Track volume and genre mix across your diary.
+          <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-accent">
+            By the numbers / 03
+          </p>
+
+          <h2 className="mt-4 font-serif text-4xl font-normal leading-tight tracking-tight sm:text-5xl lg:text-6xl">
+            Films watched.
+          </h2>
+
+          <p className="mt-3 max-w-lg text-sm leading-6 text-muted">
+            A closer look at your viewing habits, from annual rituals to the genres you return to.
           </p>
         </div>
-      </div>
 
-      <div className="flex flex-wrap gap-4">
-        <select
-          value={String(timeframe)}
-          onChange={(e) => {
-            const value = e.target.value;
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+          <label className="flex items-center gap-2">
+            <span className="font-mono text-[10px] uppercase tracking-wider text-muted">
+              Period
+            </span>
+            <select
+              value={String(timeframe)}
+              onChange={(event) => {
+                const value = event.target.value;
+                setTimeframe(value === 'All' ? 'All' : Number(value));
+              }}
+              className={selectClass}
+              aria-label="Filter statistics by year"
+            >
+              <option value="All">All time</option>
+              {years.map((year) => (
+                <option key={year} value={year}>
+                  {year}
+                </option>
+              ))}
+            </select>
+          </label>
 
-            setTimeframe(value === 'All' ? 'All' : Number(value));
-          }}
-          className="rounded-full border border-border/70 bg-white px-4 py-2 text-sm shadow-sm"
-        >
-          <option value="All">All</option>
+          <label className="flex items-center gap-2">
+            <span className="font-mono text-[10px] uppercase tracking-wider text-muted">Group</span>
+            <select
+              value={groupBy}
+              onChange={(event) => setGroupBy(event.target.value as Grouping)}
+              className={selectClass}
+              aria-label="Group watch activity by"
+            >
+              <option value="Year">Year</option>
+              <option value="Month">Month</option>
+              <option value="Day">Weekday</option>
+            </select>
+          </label>
+        </div>
+      </header>
 
-          {years.map((year) => (
-            <option key={year} value={year}>
-              {year}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={groupBy}
-          onChange={(e) => setGroupBy(e.target.value as Grouping)}
-          className="rounded-full border border-border/70 bg-white px-4 py-2 text-sm shadow-sm"
-        >
-          <option value="Year">Year</option>
-          <option value="Month">Month</option>
-          <option value="Day">Day</option>
-        </select>
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-        <div className="rounded-3xl border border-border/70 bg-white/80 p-4 shadow-sm backdrop-blur">
-          <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Watch volume</p>
-
-          <div className="mt-4 h-88">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" />
-
-                <XAxis dataKey="label" />
-
-                <YAxis allowDecimals={false} />
-
-                <Tooltip />
-
-                <Bar dataKey="watched" radius={[6, 6, 0, 0]} fill="#0081a7" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+      {/* Summary figures */}
+      <div className="grid grid-cols-2 border-y border-border sm:grid-cols-3">
+        <div className="py-5 pr-4 sm:pr-6">
+          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted">
+            Diary entries
+          </p>
+          <p className="mt-3 font-serif text-3xl tabular-nums text-foreground sm:text-4xl">
+            {filteredEvents.length.toLocaleString('en-GB')}
+          </p>
+          <p className="mt-1 text-xs text-muted">
+            {timeframe === 'All' ? 'Across all years' : `In ${timeframe}`}
+          </p>
         </div>
 
-        <div className="rounded-3xl border border-border/70 bg-white/80 p-4 shadow-sm backdrop-blur">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Genre mix</p>
-              <p className="mt-1 text-sm text-slate-500">Click a slice to see recent films.</p>
-            </div>
-            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600">
-              {totalGenreWatched} watches
-            </span>
-          </div>
+        <div className="border-l border-border py-5 pl-4 sm:px-6">
+          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted">
+            Genres explored
+          </p>
+          <p className="mt-3 font-serif text-3xl tabular-nums text-foreground sm:text-4xl">
+            {genreData.length.toLocaleString('en-GB')}
+          </p>
+          <p className="mt-1 text-xs text-muted">Distinct categories</p>
+        </div>
 
-          <div className="mt-4 h-72">
-            {genreData.length ? (
+        <div className="col-span-2 mt-4 border-t border-border py-5 sm:col-span-1 sm:mt-0 sm:border-l sm:border-t-0 sm:pl-6">
+          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted">
+            Most watched genre
+          </p>
+          <p className="mt-3 truncate font-serif text-2xl text-foreground sm:text-3xl">
+            {genreData[0]?.label ?? '—'}
+          </p>
+          {genreData[0] && (
+            <p className="mt-1 text-xs text-muted">
+              {genreData[0].watched.toLocaleString('en-GB')} diary entries
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Charts */}
+      <div className="grid gap-8 lg:grid-cols-[1.2fr_0.8fr]">
+        {/* Viewing activity */}
+        <article className="min-w-0">
+          <header className="flex items-start justify-between gap-4 border-b border-border pb-4">
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-accent">
+                01 / Viewing activity
+              </p>
+              <h3 className="mt-3 font-serif text-2xl sm:text-3xl">Watch volume</h3>
+              <p className="mt-2 text-xs leading-5 text-muted">
+                {groupBy === 'Year'
+                  ? 'Diary entries by year'
+                  : groupBy === 'Month'
+                    ? 'Diary entries by calendar month'
+                    : 'Diary entries by day of the week'}
+              </p>
+            </div>
+
+            <span className="shrink-0 pt-1 font-mono text-[10px] uppercase tracking-wider text-muted">
+              {timeframe === 'All' ? 'All time' : timeframe}
+            </span>
+          </header>
+
+          <div className="mt-5 h-[22rem]">
+            {filteredEvents.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} margin={{ top: 8, right: 8, left: -20, bottom: 4 }}>
+                  <CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="2 5" />
+                  <XAxis
+                    dataKey="label"
+                    tick={{ fill: 'var(--muted)', fontSize: 10 }}
+                    axisLine={{ stroke: 'var(--border)' }}
+                    tickLine={false}
+                    dy={8}
+                  />
+                  <YAxis
+                    allowDecimals={false}
+                    tick={{ fill: 'var(--muted)', fontSize: 10 }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <Tooltip
+                    contentStyle={tooltipStyle}
+                    cursor={{ fill: 'var(--surface-hover)' }}
+                    formatter={(value) => [value, 'Diary entries']}
+                  />
+                  <Bar
+                    dataKey="watched"
+                    name="Diary entries"
+                    fill="var(--accent)"
+                    radius={[0, 0, 0, 0]}
+                    maxBarSize={40}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex h-full flex-col items-center justify-center border-y border-border text-center">
+                <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-accent">
+                  Nothing to chart
+                </p>
+                <p className="mt-3 font-serif text-xl text-foreground">No screenings recorded.</p>
+                <p className="mt-2 text-sm text-muted">Try another period or import your diary.</p>
+              </div>
+            )}
+          </div>
+        </article>
+
+        {/* Genre mix */}
+        <article className="min-w-0">
+          <header className="flex items-start justify-between gap-3 border-b border-border pb-4">
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-accent">
+                02 / Your taste in film
+              </p>
+              <h3 className="mt-3 font-serif text-2xl sm:text-3xl">Genre mix</h3>
+              <p className="mt-2 text-xs leading-5 text-muted">
+                Select a genre to explore its films.
+              </p>
+            </div>
+
+            <span className="shrink-0 pt-1 font-mono text-[10px] uppercase tracking-wider text-muted">
+              {totalGenreWatched.toLocaleString('en-GB')} watches
+            </span>
+          </header>
+
+          <div className="mt-4 h-64">
+            {genreData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Tooltip />
+                  <Tooltip contentStyle={tooltipStyle} formatter={(value, name) => [value, name]} />
                   <Pie
                     data={genreData}
                     dataKey="watched"
                     nameKey="label"
-                    innerRadius="58%"
-                    outerRadius="82%"
+                    innerRadius="57%"
+                    outerRadius="80%"
                     paddingAngle={2}
-                    stroke="transparent"
+                    stroke="var(--background)"
+                    strokeWidth={2}
                     onClick={(_, index) => {
                       const nextGenre = genreData[index]?.label ?? null;
                       setSelectedGenre(nextGenre);
@@ -294,72 +405,76 @@ export default function StatsSection({ importedItems }: { importedItems: UserFil
                         key={genre.label}
                         fill={genre.color}
                         cursor="pointer"
-                        stroke={
-                          genre.label === activeSelectedGenre ? activeGenreColor : 'transparent'
+                        opacity={
+                          activeSelectedGenre && genre.label !== activeSelectedGenre ? 0.35 : 1
                         }
-                        strokeWidth={genre.label === activeSelectedGenre ? 3 : 0}
                       />
                     ))}
                   </Pie>
                 </PieChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex h-full items-center justify-center rounded-3xl border border-dashed border-slate-200 bg-slate-50/70 px-6 text-center text-sm text-slate-500">
-                No genre data for the current timeframe yet.
+              <div className="flex h-full items-center justify-center border-y border-border px-6 text-center text-sm text-muted">
+                No genre data for this period.
               </div>
             )}
           </div>
 
-          <div className="mt-4 flex flex-wrap gap-2">
-            {genreData.slice(0, 6).map((genre) => {
+          {/* Genre selector */}
+          <div className="flex flex-wrap gap-x-4 gap-y-2 border-b border-border pb-5">
+            {genreData.slice(0, 8).map((genre) => {
               const active = activeSelectedGenre === genre.label;
 
               return (
                 <button
                   key={genre.label}
                   type="button"
-                  onClick={() => setSelectedGenre(genre.label)}
-                  className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                  aria-pressed={active}
+                  onClick={() => setSelectedGenre(active ? null : genre.label)}
+                  className={`flex items-center gap-2 border-b py-2 text-xs transition-colors ${
                     active
-                      ? 'border-slate-900 bg-slate-900 text-white'
-                      : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                      ? 'border-accent text-accent'
+                      : 'border-transparent text-muted hover:text-foreground'
                   }`}
                 >
-                  {genre.label} · {genre.watched}
+                  <span className="h-2 w-2 shrink-0" style={{ backgroundColor: genre.color }} />
+                  <span>{genre.label}</span>
+                  <span className="font-mono text-[10px] opacity-70">{genre.watched}</span>
                 </button>
               );
             })}
           </div>
 
-          <div className="mt-5 rounded-2xl border border-slate-100 bg-slate-50/80 p-4">
+          {/* Selected genre films */}
+          <div className="mt-5">
             {activeSelectedGenre ? (
               <>
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-xs uppercase tracking-[0.22em] text-slate-500">
+                    <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted">
                       Selected genre
                     </p>
-                    <h3 className="mt-1 text-xl font-semibold text-slate-900">
+                    <h4 className="mt-2 font-serif text-xl" style={{ color: activeGenreColor }}>
                       {activeSelectedGenre}
-                    </h3>
+                    </h4>
+                    <p className="mt-1 text-xs text-muted">
+                      {selectedGenreFilms.length > 0
+                        ? 'Your latest films in this genre'
+                        : 'No films in this period'}
+                    </p>
                   </div>
+
                   <button
                     type="button"
                     onClick={() => setSelectedGenre(null)}
-                    className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 hover:border-slate-300"
+                    className="border-b border-border py-1 text-xs text-muted transition-colors hover:border-accent hover:text-accent"
                   >
-                    Clear
+                    Clear selection ×
                   </button>
                 </div>
 
-                <p className="mt-2 text-sm text-slate-500">
-                  {selectedGenreFilms.length
-                    ? `Showing the 4 most recent films in ${activeSelectedGenre}.`
-                    : `No films found for ${activeSelectedGenre} in the current timeframe.`}
-                </p>
-
-                {selectedGenreFilms.length ? (
-                  <div className="mt-4 grid grid-cols-2 gap-3">
+                {selectedGenreFilms.length > 0 && (
+                  <div className="mt-4 grid grid-cols-2 gap-4">
                     {selectedGenreFilms.map((event) => (
                       <FilmCard
                         key={`${filmIdentity(event.film)}:${event.date}`}
@@ -368,15 +483,16 @@ export default function StatsSection({ importedItems }: { importedItems: UserFil
                       />
                     ))}
                   </div>
-                ) : null}
+                )}
               </>
             ) : (
-              <p className="text-sm text-slate-500">
-                Click a donut slice or genre chip to inspect the latest watches.
+              <p className="text-sm leading-6 text-muted">
+                Choose a slice or genre above to see the four most recently watched films in that
+                genre.
               </p>
             )}
           </div>
-        </div>
+        </article>
       </div>
     </section>
   );

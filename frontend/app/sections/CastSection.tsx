@@ -1,26 +1,200 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Image from 'next/image';
 import type { UserFilm, RpcStats, PersonStats } from '@/types/statistics';
-import PersonCard from '../components/PersonCard';
-import PersonModal from '../components/PersonModal';
-import { motion, AnimatePresence } from 'framer-motion';
+import { getPosterUrl } from '@/utils/tmdb';
+import PersonModal from '@/app/components/PersonModal';
 
 type CastSectionProps = {
   importedItems: UserFilm[] | null;
 };
 
-function formatCount(count: number) {
-  return `${count} film${count === 1 ? '' : 's'}`;
+type CollaboratorCategory = 'cast' | 'director';
+
+type CollaboratorGroupProps = {
+  title: string;
+  eyebrow: string;
+  people: PersonStats[];
+  category: CollaboratorCategory;
+  showAll: boolean;
+  onToggleShowAll: () => void;
+  onSelectPerson: (person: PersonStats) => void;
+};
+
+const EMPTY_STATS: RpcStats = {
+  watchedCount: 0,
+  topCast: [],
+  topDirectors: [],
+  topGenres: [],
+};
+
+function getInitials(name: string) {
+  return name
+    .split(' ')
+    .filter(Boolean)
+    .map((part) => part[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
 }
 
-// Stat card to display key metrics
-function StatCard({ label, value }: { label: string; value: string }) {
+function CollaboratorGroup({
+  title,
+  eyebrow,
+  people,
+  category,
+  showAll,
+  onToggleShowAll,
+  onSelectPerson,
+}: CollaboratorGroupProps) {
+  const [featured, ...remaining] = people;
+  const visibleRemaining = showAll ? remaining : remaining.slice(0, 4);
+
   return (
-    <div className="rounded-3xl border border-border/70 bg-white/80 p-4 shadow-sm backdrop-blur">
-      <p className="text-xs uppercase tracking-[0.22em] text-slate-500">{label}</p>
-      <p className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">{value}</p>
-    </div>
+    <section className="border-t border-border pt-6">
+      <header className="mb-6 flex items-end justify-between gap-4">
+        <div>
+          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-accent">{eyebrow}</p>
+          <h3 className="mt-2 font-serif text-3xl font-normal tracking-tight text-foreground sm:text-4xl">
+            {title}
+          </h3>
+        </div>
+
+        <span className="shrink-0 font-mono text-[10px] text-muted">
+          {String(people.length).padStart(2, '0')} PEOPLE
+        </span>
+      </header>
+
+      {featured ? (
+        <div className="grid min-w-0 gap-8 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+          {/* Featured collaborator on the left */}
+          <button
+            type="button"
+            onClick={() => onSelectPerson(featured)}
+            aria-label={`View films featuring ${featured.name}`}
+            className="group flex min-w-0 items-start gap-4 border-b border-border pb-6 text-left sm:gap-5 lg:flex-col lg:border-b-0 lg:pb-0"
+          >
+            <div className="relative h-36 w-28 shrink-0 overflow-hidden border border-border bg-surface sm:h-44 sm:w-36 lg:aspect-[3/4] lg:h-auto lg:w-full lg:max-w-56">
+              {featured.profile_path ? (
+                <Image
+                  src={getPosterUrl(featured.profile_path, 'w342')}
+                  alt={featured.name}
+                  fill
+                  sizes="(max-width: 1024px) 144px, 224px"
+                  className="object-cover transition-transform duration-500 group-hover:scale-105"
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center font-serif text-4xl text-accent">
+                  {getInitials(featured.name)}
+                </div>
+              )}
+            </div>
+
+            <div className="min-w-0 flex-1 lg:w-full">
+              <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted">
+                Most watched {category === 'cast' ? 'cast member' : 'director'}
+              </p>
+
+              <h4 className="mt-3 break-words font-serif text-2xl leading-tight text-foreground transition-colors group-hover:text-accent sm:text-3xl">
+                {featured.name}
+              </h4>
+
+              <p className="mt-3 text-sm text-muted">
+                {featured.count} {featured.count === 1 ? 'film' : 'films'} in your diary
+              </p>
+
+              <span className="mt-5 inline-flex items-center gap-2 border-b border-accent pb-1 text-xs text-accent">
+                Explore film credits <span aria-hidden="true">↗</span>
+              </span>
+            </div>
+          </button>
+
+          {/* Remaining collaborators on the right */}
+          <div className="min-w-0">
+            <div className="mb-2 flex items-center justify-between gap-3 border-b border-border pb-3">
+              <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted">
+                Also in your archive
+              </p>
+              <span className="font-mono text-[10px] text-muted">{remaining.length} MORE</span>
+            </div>
+
+            <div className="divide-y divide-border">
+              {visibleRemaining.map((person, index) => (
+                <button
+                  key={`${category}-${person.id}`}
+                  type="button"
+                  onClick={() => onSelectPerson(person)}
+                  aria-label={`View films featuring ${person.name}`}
+                  className="group grid w-full grid-cols-[1.5rem_3rem_minmax(0,1fr)_2rem] items-center gap-3 py-3 text-left transition-colors hover:bg-surface-hover sm:grid-cols-[2rem_3.5rem_minmax(0,1fr)_2rem] sm:gap-4 sm:px-2"
+                >
+                  <span className="font-mono text-[10px] tabular-nums text-muted">
+                    {String(index + 2).padStart(2, '0')}
+                  </span>
+
+                  <div className="relative h-11 w-11 overflow-hidden border border-border bg-surface sm:h-14 sm:w-14">
+                    {person.profile_path ? (
+                      <Image
+                        src={getPosterUrl(person.profile_path, 'w185')}
+                        alt={person.name}
+                        fill
+                        sizes="56px"
+                        className="object-cover transition-transform duration-300 group-hover:scale-105"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center font-serif text-base text-accent">
+                        {getInitials(person.name)}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="min-w-0">
+                    <p className="truncate font-serif text-base text-foreground transition-colors group-hover:text-accent">
+                      {person.name}
+                    </p>
+                    <p className="mt-1 text-[10px] text-muted">
+                      {person.count} {person.count === 1 ? 'film' : 'films'}
+                    </p>
+                  </div>
+
+                  <span
+                    aria-hidden="true"
+                    className="text-right text-sm text-accent opacity-0 transition-opacity group-hover:opacity-100"
+                  >
+                    ↗
+                  </span>
+                </button>
+              ))}
+
+              {remaining.length === 0 && (
+                <p className="py-6 text-sm text-muted">
+                  No other collaborators in this category yet.
+                </p>
+              )}
+            </div>
+
+            {remaining.length > 4 && (
+              <button
+                type="button"
+                onClick={onToggleShowAll}
+                className="mt-3 border-b border-border py-2 text-xs text-muted transition-colors hover:border-accent hover:text-accent"
+              >
+                {showAll ? 'Show fewer collaborators ↑' : `View all ${remaining.length} more ↓`}
+              </button>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="border-b border-border py-8">
+          <p className="font-serif text-xl text-foreground">
+            No {category === 'cast' ? 'cast' : 'director'} data yet.
+          </p>
+          <p className="mt-2 text-sm leading-6 text-muted">
+            Collaborator statistics will appear when credits are available for your watched films.
+          </p>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -28,64 +202,61 @@ export default function CastSection({ importedItems }: CastSectionProps) {
   const [stats, setStats] = useState<RpcStats | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  /** Selected diary years (null = "All years") */
-  const [selectedYears, setSelectedYears] = useState<number[] | null>(null);
-  const items = useMemo(() => importedItems ?? [], [importedItems]);
-  const hasItems = items.length > 0;
-  const [visibleCast, setVisibleCast] = useState(5);
-  const [prevVisibleCast, setPrevVisibleCast] = useState(5);
-  const [visibleDirectors, setVisibleDirectors] = useState(5);
-  const [prevVisibleDirectors, setPrevVisibleDirectors] = useState(5);
-  const [selectedPerson, setSelectedPerson] = useState<{
-    person: PersonStats;
-    films: UserFilm[];
-  } | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
 
-  const filmsByTmdbId = useMemo(
-    () =>
-      new Map(
-        items
-          .filter((film): film is UserFilm & { tmdbId: number } => film.tmdbId != null)
-          .map((film) => [film.tmdbId, film])
-      ),
-    [items]
-  );
+  const [selectedYears, setSelectedYears] = useState<number[]>([]);
+  const [showAllCast, setShowAllCast] = useState(false);
+  const [showAllDirectors, setShowAllDirectors] = useState(false);
+  const [selectedPerson, setSelectedPerson] = useState<PersonStats | null>(null);
 
-  // Compute available diary years from diary-only items.
   const availableYears = useMemo(() => {
     const years = new Set<number>();
 
-    for (const film of items) {
-      for (const event of film.watchedEvents) {
-        years.add(new Date(event.date).getFullYear());
+    for (const film of importedItems ?? []) {
+      if (!film.watched) continue;
+
+      for (const event of film.watchedEvents ?? []) {
+        const year = Number(event.date?.slice(0, 4));
+
+        if (Number.isInteger(year) && year > 0) {
+          years.add(year);
+        }
       }
     }
 
     return [...years].sort((a, b) => b - a);
-  }, [items]);
+  }, [importedItems]);
 
   const visibleItems = useMemo(() => {
-    // All years
-    if (selectedYears === null) {
-      return items.filter((film) => film.watched);
-    }
+    return (importedItems ?? []).filter((film) => {
+      if (!film.watched) return false;
+      if (selectedYears.length === 0) return true;
 
-    // Specific years
-    return items.filter((film) => {
-      return film.watchedEvents.some((event) =>
-        selectedYears.includes(new Date(event.date).getFullYear())
+      return (film.watchedEvents ?? []).some((event) =>
+        selectedYears.includes(Number(event.date?.slice(0, 4)))
       );
     });
-  }, [selectedYears, items]);
+  }, [importedItems, selectedYears]);
 
   useEffect(() => {
-    if (!hasItems) {
-      return;
-    }
-
     let cancelled = false;
 
-    async function loadCastStats() {
+    async function fetchStats() {
+      const tmdbIds = [
+        ...new Set(
+          visibleItems
+            .map((film) => film.tmdbId)
+            .filter((id): id is number => typeof id === 'number')
+        ),
+      ];
+
+      if (tmdbIds.length === 0) {
+        setStats(EMPTY_STATS);
+        setError(null);
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       setError(null);
 
@@ -93,268 +264,248 @@ export default function CastSection({ importedItems }: CastSectionProps) {
         const response = await fetch('/api/stats', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          // send only diary items that match the selected diary years
           body: JSON.stringify({
-            items: visibleItems
-              .map((item) => ({ tmdbId: item.tmdbId }))
-              .filter((it) => it.tmdbId && typeof it.tmdbId === 'number'),
+            items: tmdbIds.map((tmdbId) => ({ tmdbId })),
           }),
-          cache: 'no-store',
         });
 
-        const json = (await response.json()) as {
-          ok: boolean;
-          stats?: RpcStats;
-          error?: string;
-        };
+        if (!response.ok) {
+          throw new Error(`Failed to load statistics (${response.status})`);
+        }
 
-        if (!response.ok || !json.ok || !json.stats) {
-          throw new Error(json.error || 'Unable to load cast stats');
+        const json: { stats?: RpcStats; error?: string } = await response.json();
+
+        if (!json.stats) {
+          throw new Error(json.error || 'Statistics response was empty.');
         }
 
         if (!cancelled) setStats(json.stats);
-      } catch (fetchError) {
+      } catch (err) {
         if (!cancelled) {
-          setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
+          setError(err instanceof Error ? err.message : 'Unable to load statistics.');
+          setStats(null);
         }
       } finally {
         if (!cancelled) setLoading(false);
       }
     }
 
-    void loadCastStats();
+    void fetchStats();
 
     return () => {
       cancelled = true;
     };
-  }, [visibleItems, hasItems]);
+  }, [visibleItems, retryCount]);
 
   function toggleYear(year: number) {
-    setSelectedYears((current) => {
-      const currentYears = current ?? [];
-
-      if (currentYears.includes(year)) {
-        const next = currentYears.filter((value) => value !== year);
-        return next.length ? next : null;
-      }
-
-      return [...currentYears, year].sort((left, right) => right - left);
-    });
+    setSelectedYears((current) =>
+      current.includes(year)
+        ? current.filter((item) => item !== year)
+        : [...current, year].sort((a, b) => b - a)
+    );
   }
 
+  const castPeople = stats?.topCast ?? [];
+  const directorPeople = stats?.topDirectors ?? [];
+
+  const topDirector = directorPeople[0] ?? null;
+
+  const directorFilmIds = useMemo(
+    () => new Set(topDirector?.movies.map((movie) => movie.id) ?? []),
+    [topDirector]
+  );
+
+  const directorEvents = useMemo(() => {
+    if (!topDirector) return [];
+
+    return visibleItems.flatMap((film) => {
+      if (typeof film.tmdbId !== 'number' || !directorFilmIds.has(film.tmdbId)) {
+        return [];
+      }
+
+      return (film.watchedEvents ?? []).filter((event) => {
+        if (selectedYears.length === 0) return true;
+
+        return selectedYears.includes(Number(event.date?.slice(0, 4)));
+      });
+    });
+  }, [topDirector, visibleItems, directorFilmIds, selectedYears]);
+
+  const topDirectorAverageRating = useMemo(() => {
+    const ratings = directorEvents
+      .map((event) => event.rating)
+      .filter(
+        (rating): rating is number =>
+          typeof rating === 'number' && Number.isFinite(rating) && rating > 0
+      );
+
+    if (ratings.length === 0) return null;
+
+    return ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length;
+  }, [directorEvents]);
+
   return (
-    <section className="flex flex-col gap-4">
-      <h1 className="text-4xl font-semibold tracking-tight">Cast & Directors</h1>
-      {availableYears.length > 0 && (
-        <div className="mt-4 flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => setSelectedYears(null)}
-            className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-              selectedYears === null
-                ? 'border-slate-900 bg-slate-900 text-white'
-                : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-            }`}
-          >
-            All years
-          </button>
-          {availableYears.map((year) => {
-            const active = selectedYears === null ? false : selectedYears.includes(year);
+    <section id="cast" className="flex w-full flex-col gap-8 text-foreground">
+      <header className="border-b border-border pb-6">
+        <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-accent">
+          Your film archive / 05
+        </p>
 
-            return (
-              <button
-                key={year}
-                type="button"
-                onClick={() => toggleYear(year)}
-                className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-                  active
-                    ? 'border-emerald-700 bg-emerald-700 text-white'
-                    : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-                }`}
-              >
-                {year}
-              </button>
-            );
-          })}
+        <div className="mt-5">
+          <h2 className="font-serif text-4xl font-normal leading-tight tracking-tight sm:text-5xl lg:text-6xl">
+            Behind the frame.
+          </h2>
+          <p className="mt-3 max-w-lg text-sm leading-6 text-muted">
+            The actors and directors who appear most often in your personal history of cinema.
+          </p>
         </div>
-      )}
-      <div className="flex items-center justify-between gap-4">
-        {loading && <p className="text-sm text-slate-500">Refreshing…</p>}
-      </div>
+      </header>
 
-      {error && (
-        <p className="mt-4 rounded-2xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
-      )}
+      {/* Shared year filters */}
+      {availableYears.length > 0 && (
+        <div>
+          <p className="mb-3 font-mono text-[10px] uppercase tracking-[0.18em] text-muted">
+            Filter by diary year
+          </p>
 
-      {hasItems && !error && stats && (
-        <div className="mt-5 space-y-5">
-          <div className="flex flex-col gap-4">
-            <div className="rounded-3xl border border-border/70 bg-card p-4 shadow-sm">
-              <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Top cast</p>
-              <div className="mt-3">
-                {stats.topCast.length ? (
-                  <>
-                    <motion.div
-                      layout
-                      transition={{
-                        layout: {
-                          duration: 0.35,
-                          ease: 'easeInOut',
-                        },
-                      }}
-                      className="grid grid-cols-5 gap-4"
-                    >
-                      <AnimatePresence>
-                        {stats.topCast.slice(0, visibleCast).map((person) => (
-                          <motion.div
-                            key={person.id}
-                            layout
-                            initial={{ opacity: 0, scale: 0.9 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.9 }}
-                            transition={{ duration: 0.25 }}
-                          >
-                            <PersonCard
-                              person={person}
-                              onClick={() =>
-                                setSelectedPerson({
-                                  person,
-                                  films: person.movies.flatMap((movie) => {
-                                    const film = filmsByTmdbId.get(movie.id);
-                                    return film ? [film] : [];
-                                  }),
-                                })
-                              }
-                            />
-                          </motion.div>
-                        ))}
-                      </AnimatePresence>
-                    </motion.div>
+          <div className="flex flex-wrap gap-x-5 gap-y-2">
+            <button
+              type="button"
+              onClick={() => setSelectedYears([])}
+              aria-pressed={selectedYears.length === 0}
+              className={`border-b py-2 text-xs transition-colors ${
+                selectedYears.length === 0
+                  ? 'border-accent text-accent'
+                  : 'border-transparent text-muted hover:text-foreground'
+              }`}
+            >
+              All years
+            </button>
 
-                    <div className="mt-4 flex justify-center gap-3">
-                      {visibleCast > 5 && (
-                        <button
-                          onClick={() => setVisibleCast(5)}
-                          className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-100"
-                        >
-                          Show less
-                        </button>
-                      )}
+            {availableYears.map((year) => {
+              const active = selectedYears.includes(year);
 
-                      {visibleCast < stats.topCast.length && (
-                        <button
-                          onClick={() => {
-                            if (visibleCast === 5 && prevVisibleCast > 5) {
-                              setVisibleCast(prevVisibleCast);
-                            } else {
-                              setVisibleCast((prev) => {
-                                const next = Math.min(stats.topCast.length, prev + 10);
-                                setPrevVisibleCast(next);
-                                return next;
-                              });
-                            }
-                          }}
-                          className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-100"
-                        >
-                          Show more
-                        </button>
-                      )}
-                    </div>
-                  </>
-                ) : (
-                  <p className="text-sm text-slate-500">No cast data yet.</p>
-                )}
-              </div>
-            </div>
-
-            <div className="rounded-3xl border border-border/70 bg-card p-4 shadow-sm">
-              <p className="text-xs uppercase tracking-[0.22em] text-subtitle">Top directors</p>
-              <div className="mt-3">
-                {stats.topDirectors.length ? (
-                  <>
-                    <motion.div
-                      layout
-                      transition={{
-                        layout: {
-                          duration: 0.35,
-                          ease: 'easeInOut',
-                        },
-                      }}
-                      className="grid grid-cols-5 gap-4"
-                    >
-                      <AnimatePresence>
-                        {stats.topDirectors.slice(0, visibleDirectors).map((person) => (
-                          <motion.div
-                            key={person.id}
-                            layout
-                            initial={{ opacity: 0, scale: 0.9 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.9 }}
-                            transition={{ duration: 0.25 }}
-                          >
-                            <PersonCard
-                              person={person}
-                              onClick={() =>
-                                setSelectedPerson({
-                                  person,
-                                  films: person.movies.flatMap((movie) => {
-                                    const film = filmsByTmdbId.get(movie.id);
-                                    return film ? [film] : [];
-                                  }),
-                                })
-                              }
-                            />
-                          </motion.div>
-                        ))}
-                      </AnimatePresence>
-                    </motion.div>
-
-                    <div className="mt-4 flex justify-center gap-3">
-                      {visibleDirectors > 5 && (
-                        <button
-                          onClick={() => setVisibleDirectors(5)}
-                          className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-100"
-                        >
-                          Show less
-                        </button>
-                      )}
-
-                      {visibleDirectors < stats.topDirectors.length && (
-                        <button
-                          onClick={() => {
-                            if (visibleDirectors === 5 && prevVisibleDirectors > 5) {
-                              setVisibleDirectors(prevVisibleDirectors);
-                            } else {
-                              setVisibleDirectors((prev) => {
-                                const next = Math.min(stats.topDirectors.length, prev + 10);
-                                setPrevVisibleDirectors(next);
-                                return next;
-                              });
-                            }
-                          }}
-                          className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-100"
-                        >
-                          Show more
-                        </button>
-                      )}
-                    </div>
-                  </>
-                ) : (
-                  <p className="text-sm text-slate-500">No director data yet.</p>
-                )}
-              </div>
-            </div>
+              return (
+                <button
+                  type="button"
+                  key={year}
+                  onClick={() => toggleYear(year)}
+                  aria-pressed={active}
+                  className={`border-b py-2 font-mono text-xs transition-colors ${
+                    active
+                      ? 'border-accent text-accent'
+                      : 'border-transparent text-muted hover:text-foreground'
+                  }`}
+                >
+                  {year}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
 
-      {!hasItems && !loading && !error && (
-        <p className="mt-4 text-sm text-slate-500">Import a ZIP export to populate cast stats.</p>
+      {/* Loading state */}
+      {loading && (
+        <div className="flex min-h-40 items-center gap-4 border-y border-border py-8">
+          <span className="h-5 w-5 animate-spin border-2 border-border border-t-accent" />
+          <div>
+            <p className="font-serif text-xl text-foreground">Looking through the credits.</p>
+            <p className="mt-1 text-xs text-muted">Gathering cast and director statistics…</p>
+          </div>
+        </div>
       )}
+
+      {/* Error state */}
+      {!loading && error && (
+        <div className="border-y border-border py-8">
+          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-accent">
+            Archive lookup failed
+          </p>
+          <p className="mt-3 text-sm text-muted">{error}</p>
+          <button
+            type="button"
+            onClick={() => setRetryCount((count) => count + 1)}
+            className="mt-4 border-b border-accent pb-1 text-sm text-accent hover:opacity-70"
+          >
+            Try again ↻
+          </button>
+        </div>
+      )}
+
+      {/* Empty state */}
+      {!loading && !error && visibleItems.length === 0 && (
+        <div className="border-y border-border py-12">
+          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-accent">
+            No screenings found
+          </p>
+          <h3 className="mt-3 font-serif text-2xl text-foreground">Nothing in the frame yet.</h3>
+          <p className="mt-2 text-sm leading-6 text-muted">
+            Import your Letterboxd diary or choose another year to explore your cast and directors.
+          </p>
+        </div>
+      )}
+
+      {/* Cast first, directors second */}
+      {!loading && !error && visibleItems.length > 0 && (
+        <div className="flex flex-col gap-10">
+          <CollaboratorGroup
+            title="Cast"
+            eyebrow="In front of the camera / 01"
+            people={castPeople}
+            category="cast"
+            showAll={showAllCast}
+            onToggleShowAll={() => setShowAllCast((current) => !current)}
+            onSelectPerson={setSelectedPerson}
+          />
+
+          <CollaboratorGroup
+            title="Directors"
+            eyebrow="Behind the camera / 02"
+            people={directorPeople}
+            category="director"
+            showAll={showAllDirectors}
+            onToggleShowAll={() => setShowAllDirectors((current) => !current)}
+            onSelectPerson={setSelectedPerson}
+          />
+
+          {/* Featured director viewing statistics */}
+          {topDirector && (
+            <div className="grid grid-cols-2 border-y border-border py-4 sm:grid-cols-3">
+              <div className="pr-4">
+                <p className="font-mono text-[10px] uppercase tracking-wider text-muted">
+                  Favourite director
+                </p>
+                <p className="mt-2 truncate font-serif text-lg text-foreground">
+                  {topDirector.name}
+                </p>
+              </div>
+
+              <div className="border-l border-border px-4">
+                <p className="font-mono text-[10px] uppercase tracking-wider text-muted">
+                  Total views
+                </p>
+                <p className="mt-2 font-serif text-2xl text-foreground">{directorEvents.length}</p>
+              </div>
+
+              <div className="col-span-2 mt-4 border-t border-border pt-4 sm:col-span-1 sm:mt-0 sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0">
+                <p className="font-mono text-[10px] uppercase tracking-wider text-muted">
+                  Average rating
+                </p>
+                <p className="mt-2 font-serif text-2xl text-foreground">
+                  {topDirectorAverageRating !== null ? topDirectorAverageRating.toFixed(1) : '—'}
+                  <span className="ml-1 font-mono text-[10px] text-muted">/ 5</span>
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {selectedPerson && (
         <PersonModal
-          person={selectedPerson.person}
-          films={selectedPerson.films}
+          person={selectedPerson}
+          films={importedItems ?? []}
           onClose={() => setSelectedPerson(null)}
         />
       )}

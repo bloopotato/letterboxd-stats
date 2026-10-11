@@ -67,8 +67,6 @@ export async function POST(request: Request) {
     const [peopleRows, genreRows] = await Promise.all([
       fetchSupabaseRpc<PersonStats>('top_people_for_movies', {
         movie_ids: tmdbIds,
-        release_years: years.length ? years : null,
-        limit_count: 50,
       }),
       fetchSupabaseRpc<GenreStats>('top_genres_for_movies', {
         movie_ids: tmdbIds,

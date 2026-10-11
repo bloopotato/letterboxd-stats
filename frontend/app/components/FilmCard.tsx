@@ -1,6 +1,6 @@
-import { UserFilm, WatchedEvent } from '@/types/statistics';
-import { getPosterUrl } from '@/utils/tmdb';
 import Image from 'next/image';
+import type { UserFilm, WatchedEvent } from '@/types/statistics';
+import { getPosterUrl } from '@/utils/tmdb';
 
 export default function FilmCard({
   film,
@@ -9,49 +9,57 @@ export default function FilmCard({
   film: UserFilm;
   watchedEvent: WatchedEvent | null;
 }) {
+  const posterUrl = getPosterUrl(film.posterPath, 'w342');
+
+  const watchedDate = watchedEvent?.date
+    ? new Date(`${watchedEvent.date}T12:00:00`).toLocaleDateString('en-GB', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      })
+    : null;
+
   return (
-    <div className="group overflow-hidden rounded-[1.6rem] border border-border/70 bg-card shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
-      {/* Film Poster */}
-      <div className="relative aspect-2/3 overflow-hidden">
-        <Image
-          src={getPosterUrl(film.posterPath, 'w342')}
-          alt={film.name}
-          fill
-          className="object-cover transition-transform duration-300 group-hover:scale-105"
-        />
-
-        <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-black/80 via-black/30 to-transparent p-4">
-          <p className="line-clamp-2 text-lg font-semibold text-white">{film.name}</p>
-
-          <p className="text-sm text-white/80">{film.year}</p>
-        </div>
-      </div>
-
-      <div className="space-y-3 p-4">
-        {watchedEvent && (
-          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-            {new Date(watchedEvent.date).toLocaleDateString('en-GB', {
-              day: 'numeric',
-              month: 'short',
-              year: 'numeric',
-            })}
-          </p>
+    <article className="group min-w-0">
+      {/* Poster */}
+      <div className="relative aspect-[2/3] overflow-hidden border border-border bg-surface">
+        {posterUrl ? (
+          <Image
+            src={posterUrl}
+            alt={film.name}
+            fill
+            sizes="(max-width: 640px) 45vw, (max-width: 1024px) 25vw, 220px"
+            className="object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+          />
+        ) : (
+          <div className="flex h-full items-center justify-center p-4 text-center">
+            <span className="font-serif text-lg text-muted">{film.name}</span>
+          </div>
         )}
 
-        <div className="flex flex-wrap gap-2">
-          {film.rating && (
-            <span className="rounded-full bg-secondary px-3 py-1 text-xs">★ {film.rating}</span>
-          )}
+        {/* Poster footer */}
+        <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-black/90 via-black/40 to-transparent p-3 pt-12">
+          <p className="line-clamp-2 font-serif text-lg leading-tight text-white">{film.name}</p>
+          <p className="mt-1 font-mono text-[10px] tracking-wide text-white/70">{film.year}</p>
+        </div>
+      </div>
 
-          <span className="rounded-full bg-primary px-3 py-1 text-xs">{film.year}</span>
+      {/* Diary details */}
+      <div className="border-b border-border py-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-accent">
+              {watchedEvent?.rewatch ? 'Rewatched' : 'Screened'}
+            </p>
 
-          {watchedEvent?.rewatch && (
-            <span className="rounded-full bg-amber-100 px-3 py-1 text-xs text-amber-900">
-              Rewatch
-            </span>
+            <p className="mt-1 text-xs text-muted">{watchedDate ?? 'Date not recorded'}</p>
+          </div>
+
+          {watchedEvent?.rating != null && (
+            <span className="shrink-0 font-mono text-xs text-accent">★ {watchedEvent.rating}</span>
           )}
         </div>
       </div>
-    </div>
+    </article>
   );
 }

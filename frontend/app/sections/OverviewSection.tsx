@@ -2,7 +2,6 @@
 
 import { useMemo } from 'react';
 import type { UserFilm } from '@/types/statistics';
-import OverviewCard from '@/app/components/OverviewCard';
 
 type OverviewSectionProps = {
   importedItems: UserFilm[];
@@ -13,8 +12,11 @@ type RankedItem = {
   count: number;
 };
 
+type WatchEvent = UserFilm['watchedEvents'][number];
+
 type RecentWatchEntry = {
   film: UserFilm;
+  event: WatchEvent;
   index: number;
 };
 
@@ -31,25 +33,14 @@ type OverviewData = {
   recentWatchHistory: RecentWatchEntry[];
 };
 
-function StatCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-3xl border border-border/70 bg-white/80 p-4 shadow-sm backdrop-blur">
-      <p className="text-xs uppercase tracking-[0.22em] text-slate-500">{label}</p>
-      <p className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">{value}</p>
-    </div>
-  );
-}
-
 function formatRating(value: number | null) {
   return value == null ? '—' : value.toFixed(2);
 }
 
 function formatRuntime(value: number | null, unit: 'min' | 'h' = 'h') {
   if (value == null) return '—';
-  if (unit === 'h') {
-    return `${(value / 60).toFixed(1)}`;
-  }
-  return `${Math.round(value)}`;
+
+  return unit === 'h' ? `${(value / 60).toFixed(1)}` : `${Math.round(value)}`;
 }
 
 function parseDateScore(value?: string | null) {
@@ -59,8 +50,17 @@ function parseDateScore(value?: string | null) {
   return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp;
 }
 
-function getRecentDate(film: UserFilm) {
-  return film.watchedEvents[0]?.date ?? null;
+function formatWatchDate(value?: string | null) {
+  if (!value) return 'Date unknown';
+
+  const timestamp = Date.parse(value);
+  if (Number.isNaN(timestamp)) return value;
+
+  return new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  }).format(timestamp);
 }
 
 function buildOverviewData(importedItems: UserFilm[]): OverviewData {
@@ -75,12 +75,8 @@ function buildOverviewData(importedItems: UserFilm[]): OverviewData {
   let runtimeSum = 0;
   let runtimeCount = 0;
 
-  console.log('imported items: ', importedItems);
-
   importedItems.forEach((film, index) => {
-    if (film.inWatchlist) {
-      watchlistCount += 1;
-    }
+    if (film.inWatchlist) watchlistCount += 1;
 
     diaryCount += film.watchedEvents.length;
 
@@ -93,12 +89,13 @@ function buildOverviewData(importedItems: UserFilm[]): OverviewData {
       runtimeSum += film.runtime;
       runtimeCount += 1;
     }
+
     if (film.cached || film.runtime != null) {
       tmdbMatchedCount += 1;
     }
 
     for (const event of film.watchedEvents) {
-      recentWatchHistory.push({ film, index });
+      recentWatchHistory.push({ film, event, index });
 
       for (const tag of event.tags) {
         tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
@@ -107,8 +104,8 @@ function buildOverviewData(importedItems: UserFilm[]): OverviewData {
   });
 
   recentWatchHistory.sort((left, right) => {
-    const dateDelta =
-      parseDateScore(getRecentDate(right.film)) - parseDateScore(getRecentDate(left.film));
+    const dateDelta = parseDateScore(right.event.date) - parseDateScore(left.event.date);
+
     if (dateDelta !== 0) return dateDelta;
     return right.index - left.index;
   });
@@ -132,81 +129,224 @@ function buildOverviewData(importedItems: UserFilm[]): OverviewData {
   };
 }
 
+function StatCard({
+  label,
+  value,
+  detail,
+  index,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  index: string;
+}) {
+  return (
+    <article className="group min-w-0 border-y border-border py-5 sm:py-6">
+      <div className="mb-8 flex items-center justify-between gap-2">
+        <span className="text-[10px] uppercase tracking-[0.18em] text-muted">{label}</span>
+        <span className="font-mono text-[10px] text-accent">{index}</span>
+      </div>
+
+      <p className="font-serif text-5xl font-normal tracking-tight text-foreground transition-colors group-hover:text-accent sm:text-6xl">
+        {value}
+      </p>
+
+      <p className="mt-3 text-xs leading-5 text-muted">{detail}</p>
+    </article>
+  );
+}
+
 export default function OverviewSection({ importedItems }: OverviewSectionProps) {
   const items = useMemo(() => importedItems ?? [], [importedItems]);
   const overview = useMemo(() => buildOverviewData(items), [items]);
   const hasItems = overview.importedCount > 0;
 
   return (
-    <section className="flex flex-col w-full gap-4">
-      {/* Header */}
-      <div className="">
-        <h1 className="text-4xl font-semibold tracking-tight">In total, you&apos;ve seen...</h1>
-      </div>
+    <section id="overview" className="flex w-full flex-col gap-10">
+      <header className="border-b border-border pb-6">
+        <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-accent">
+          Your film archive / 01
+        </p>
 
-      {hasItems && (
-        <div className="mt-5 space-y-5">
-          <div className="grid gap-4 grid-cols-3">
-            <OverviewCard title="movies" value={String(overview.importedCount)} />
-            <OverviewCard title="hours" value={formatRuntime(overview.runtimeSum, 'h')} />
-            <OverviewCard title="diary entries" value={String(overview.diaryCount)} />
+        <div className="mt-5 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+          <div>
+            <h2 className="font-serif text-4xl font-normal leading-tight tracking-tight text-foreground sm:text-5xl lg:text-6xl">
+              By the numbers.
+            </h2>
+            <p className="mt-3 max-w-lg text-sm leading-6 text-muted">
+              A quantitative portrait of your life in cinema. Every entry, every rewatch, every
+              hour.
+            </p>
           </div>
 
-          <div className="flex flex-wrap gap-2 text-xs text-slate-500">
-            <span className="rounded-full border border-border/70 bg-white/70 px-3 py-1">
-              TMDB matches {overview.tmdbMatchedCount}
-            </span>
-            <span className="rounded-full border border-border/70 bg-white/70 px-3 py-1">
-              Average runtime {formatRuntime(overview.averageRuntime)}
-            </span>
+          {hasItems && (
+            <p className="font-mono text-[10px] uppercase tracking-wider text-muted">
+              {overview.importedCount.toLocaleString('en-GB')} films indexed
+            </p>
+          )}
+        </div>
+      </header>
+
+      {!hasItems ? (
+        <div className="border-y border-border px-6 py-12">
+          <p className="font-mono text-xs text-accent">NO ARCHIVE FOUND</p>
+          <p className="mt-3 font-serif text-2xl text-foreground">Your story starts here.</p>
+          <p className="mt-2 text-sm leading-6 text-muted">
+            Import your Letterboxd ZIP export to explore your viewing history.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-10">
+          {/* Primary statistics */}
+          <div className="grid grid-cols-1 gap-x-8 sm:grid-cols-3">
+            <StatCard
+              label="Films in archive"
+              value={overview.importedCount.toLocaleString('en-GB')}
+              detail="Unique films imported"
+              index="01"
+            />
+            <StatCard
+              label="Time at the cinema"
+              value={formatRuntime(overview.runtimeSum)}
+              detail="Hours of recorded runtime"
+              index="02"
+            />
+            <StatCard
+              label="Diary entries"
+              value={overview.diaryCount.toLocaleString('en-GB')}
+              detail="Including rewatches"
+              index="03"
+            />
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="rounded-3xl border border-border/70 bg-white/80 p-4 shadow-sm">
-              <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Top tags</p>
-              <div className="mt-3 space-y-2">
-                {overview.topTags.length ? (
-                  overview.topTags.map((item, index) => (
-                    <div
-                      key={`${item.name}-${index}`}
-                      className="flex items-center justify-between gap-3"
-                    >
-                      <span className="text-sm font-medium text-slate-800">{item.name}</span>
-                      <span className="text-sm text-slate-500">{item.count}</span>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-sm text-slate-500">No tag data yet.</p>
-                )}
+          {/* Archive facts */}
+          <div className="grid grid-cols-2 border-y border-border sm:grid-cols-4">
+            {[
+              {
+                label: 'Average rating',
+                value: formatRating(overview.averageRating),
+              },
+              {
+                label: 'Average runtime',
+                value: `${formatRuntime(overview.averageRuntime, 'min')} min`,
+              },
+              {
+                label: 'TMDB matches',
+                value: overview.tmdbMatchedCount.toLocaleString('en-GB'),
+              },
+              {
+                label: 'Watchlist',
+                value: overview.watchlistCount.toLocaleString('en-GB'),
+              },
+            ].map((item, index) => (
+              <div
+                key={item.label}
+                className={`py-4 pr-3 ${index % 2 === 1 ? 'pl-4' : ''} ${
+                  index < 2 ? 'border-b border-border sm:border-b-0' : ''
+                } ${
+                  index === 1 || index === 3 ? 'sm:border-r-0' : 'sm:border-r sm:border-border'
+                } ${index >= 2 ? 'sm:pl-5' : ''}`}
+              >
+                <p className="text-xs text-muted">{item.label}</p>
+                <p className="mt-2 font-serif text-2xl text-foreground">{item.value}</p>
               </div>
-            </div>
+            ))}
+          </div>
 
-            <div className="rounded-3xl border border-border/70 bg-white/80 p-4 shadow-sm">
-              <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Recent watches</p>
-              <div className="mt-3 space-y-2">
-                {overview.recentWatchHistory.length ? (
-                  overview.recentWatchHistory.map(({ film }, index) => (
-                    <div
-                      key={`${film.name}-${index}`}
-                      className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50/70 px-3 py-2"
-                    >
-                      <span className="text-sm font-medium text-slate-800">{film.name}</span>
-                      <span className="text-sm text-slate-500">
-                        {film.year || '—'} · {formatRating(film.rating)}
-                      </span>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-sm text-slate-500">No watch history yet.</p>
-                )}
+          {/* Tags and recent watches */}
+          <div className="grid grid-cols-1 gap-10 lg:grid-cols-2">
+            <article className="min-w-0">
+              <div className="mb-6 border-b border-border pb-4">
+                <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-accent">
+                  Field notes / 01
+                </p>
+                <h3 className="mt-2 font-serif text-3xl font-normal text-foreground">
+                  Your viewing habits.
+                </h3>
+                <p className="mt-2 text-xs text-muted">
+                  The tags that recur throughout your diary.
+                </p>
               </div>
-            </div>
+
+              {overview.topTags.length ? (
+                <ol className="space-y-5">
+                  {overview.topTags.map((item, index) => {
+                    const maxCount = overview.topTags[0].count;
+                    const percentage = maxCount ? (item.count / maxCount) * 100 : 0;
+
+                    return (
+                      <li key={`${item.name}-${index}`}>
+                        <div className="mb-2 flex items-baseline justify-between gap-3">
+                          <div className="flex min-w-0 items-baseline gap-3">
+                            <span className="font-mono text-[10px] text-accent">
+                              {String(index + 1).padStart(2, '0')}
+                            </span>
+                            <span className="truncate text-sm text-foreground">{item.name}</span>
+                          </div>
+                          <span className="font-mono text-xs text-muted">{item.count}</span>
+                        </div>
+
+                        <div className="ml-7 h-px bg-border">
+                          <div className="h-full bg-accent" style={{ width: `${percentage}%` }} />
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ol>
+              ) : (
+                <p className="py-6 text-sm text-muted">No tag data in your diary yet.</p>
+              )}
+            </article>
+
+            <article className="min-w-0">
+              <div className="mb-6 border-b border-border pb-4">
+                <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-accent">
+                  Screening log / 02
+                </p>
+                <h3 className="mt-2 font-serif text-3xl font-normal text-foreground">
+                  Recently watched.
+                </h3>
+                <p className="mt-2 text-xs text-muted">The latest entries in your film diary.</p>
+              </div>
+
+              {overview.recentWatchHistory.length ? (
+                <ol className="divide-y divide-border">
+                  {overview.recentWatchHistory.map(({ film, event, index }, rowIndex) => (
+                    <li
+                      key={`${film.name}-${event.date ?? 'unknown'}-${index}-${rowIndex}`}
+                      className="flex items-start justify-between gap-4 py-4 first:pt-0"
+                    >
+                      <div className="flex min-w-0 gap-3">
+                        <span className="pt-1 font-mono text-[10px] text-accent">
+                          {String(rowIndex + 1).padStart(2, '0')}
+                        </span>
+
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-foreground">
+                            {film.name}
+                          </p>
+                          <p className="mt-1 text-xs leading-5 text-muted">
+                            {film.year || 'Year unknown'}
+                            {event.tags.length > 0 && ` · ${event.tags.slice(0, 2).join(', ')}`}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="shrink-0 text-right">
+                        <p className="font-mono text-xs text-foreground">
+                          {formatRating(film.rating)}
+                        </p>
+                        <p className="mt-1 text-[10px] text-muted">{formatWatchDate(event.date)}</p>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="py-6 text-sm text-muted">No watch history yet.</p>
+              )}
+            </article>
           </div>
         </div>
-      )}
-
-      {!hasItems && (
-        <p className="mt-4 text-sm text-slate-500">Import a ZIP export to populate the overview.</p>
       )}
     </section>
   );

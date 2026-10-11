@@ -1,55 +1,100 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState, type ChangeEvent, type DragEvent } from 'react';
 import { parseLetterboxdZip } from '@/utils/data/parseZip';
 import { buildUserFilmMap } from '@/utils/data/normalise';
-import { UserFilm } from '@/types/statistics';
+import type { UserFilm } from '@/types/statistics';
 
 type UploadSectionProps = {
   onImported?: (results: UserFilm[]) => void;
 };
 
-// Instructions for uploading letterboxd data
 const INSTRUCTIONS = [
-  'On Letterboxd, go to Settings → Data → Export Your Data',
-  'Download the ZIP file',
-  'Upload the ZIP file below to see your stats',
+  'Export your data from Letterboxd Settings',
+  'Choose the downloaded ZIP file',
+  'Your archive is processed and analysed',
 ];
 
+function ArchiveIcon({ size = 22 }: { size?: number }) {
+  return (
+    <svg
+      aria-hidden="true"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M4 7h16v13H4z" />
+      <path d="M3 3h18v4H3zM9 11h6" />
+    </svg>
+  );
+}
+
+function UploadIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 16V4M7 9l5-5 5 5" />
+      <path d="M5 14v5h14v-5" />
+    </svg>
+  );
+}
+
+function formatEta(seconds: number) {
+  if (seconds <= 0) return 'Finishing up…';
+  if (seconds < 60) return `${seconds}s remaining`;
+
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+
+  return `${minutes}m ${remainingSeconds.toString().padStart(2, '0')}s remaining`;
+}
+
 export default function UploadSection({ onImported }: UploadSectionProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
   const [loading, setLoading] = useState(false);
   const [enriched, setEnriched] = useState<UserFilm[] | null>(null);
   const [progress, setProgress] = useState(0);
   const [etaSeconds, setEtaSeconds] = useState<number | null>(null);
+  const [fileName, setFileName] = useState('');
+  const [error, setError] = useState('');
+  const [isDragging, setIsDragging] = useState(false);
 
-  function estimateDurationMs(itemCount: number) {
-    return Math.max(3000, itemCount * 600);
-  }
+  async function processFile(file: File) {
+    if (!file.name.toLowerCase().endsWith('.zip')) {
+      setError('Please choose a Letterboxd ZIP export.');
+      return;
+    }
 
-  function formatEta(seconds: number) {
-    if (seconds <= 0) return 'Less than 1 second';
-    if (seconds < 60) return `${seconds} second${seconds === 1 ? '' : 's'}`;
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    return `${minutes}m ${remainingSeconds.toString().padStart(2, '0')}s`;
-  }
-
-  async function handleFileUpload(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    event.target.value = '';
+    if (loading) return;
 
     let progressTimer: number | null = null;
 
     try {
       setLoading(true);
+      setError('');
       setEnriched(null);
+      setFileName(file.name);
+      setProgress(0);
 
-      // (1) Parse the ZIP file and extract diary/watchlist entries
+      // Parse the Letterboxd archive.
       const parsedData = await parseLetterboxdZip(file);
 
-      // (2) Build a map of unique films from the parsed data
+      // Build the unique film map.
       const films = Array.from(
         buildUserFilmMap(
           parsedData.diary,
@@ -59,142 +104,251 @@ export default function UploadSection({ onImported }: UploadSectionProps) {
         ).values()
       );
 
-      // Estimate total duration for progress bar and ETA
-      const estimatedTotalMs = estimateDurationMs(films.length);
+      // Estimate processing time for the progress indicator.
+      const estimatedTotalMs = Math.max(3000, films.length * 600);
       const startedAt = Date.now();
 
-      setProgress(0);
       setEtaSeconds(Math.ceil(estimatedTotalMs / 1000));
 
       progressTimer = window.setInterval(() => {
         const elapsed = Date.now() - startedAt;
         const nextProgress = Math.min(95, Math.round((elapsed / estimatedTotalMs) * 100));
         const remainingMs = Math.max(0, estimatedTotalMs - elapsed);
+
         setProgress(nextProgress);
         setEtaSeconds(Math.max(1, Math.ceil(remainingMs / 1000)));
       }, 250);
 
-      // (4) Lookup in supabase - [/api/lookup]
-      const res = await fetch('/api/lookup', {
+      // Enrich films through the lookup API.
+      const response = await fetch('/api/lookup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ items: films }),
       });
-      const json = await res.json();
-      if (!json.ok) throw new Error(json.error || 'Lookup failed');
+
+      const json = await response.json();
+
+      if (!response.ok) {
+        throw new Error(json.error || 'Could not process your archive.');
+      }
 
       const enrichedFilms: UserFilm[] = json.films;
-      console.log('Enriched films:', enrichedFilms);
 
-      if (progressTimer != null) {
+      if (progressTimer !== null) {
         window.clearInterval(progressTimer);
+        progressTimer = null;
       }
+
       setProgress(100);
       setEtaSeconds(0);
-
       setEnriched(enrichedFilms);
       onImported?.(enrichedFilms);
-    } catch (error) {
-      console.error('Error parsing/enriching ZIP file:', error);
+    } catch (err) {
+      console.error('Error processing Letterboxd ZIP:', err);
+
+      setError(
+        err instanceof Error ? err.message : 'Something went wrong while processing your archive.'
+      );
     } finally {
-      if (progressTimer != null) {
+      if (progressTimer !== null) {
         window.clearInterval(progressTimer);
       }
+
       setLoading(false);
       setProgress(0);
       setEtaSeconds(null);
     }
   }
 
+  function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+
+    // Allow selecting the same file again.
+    event.target.value = '';
+
+    if (file) {
+      void processFile(file);
+    }
+  }
+
+  function handleDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setIsDragging(false);
+
+    const file = event.dataTransfer.files[0];
+
+    if (file) {
+      void processFile(file);
+    }
+  }
+
   return (
-    <section className="flex flex-col w-full gap-4">
-      {/* Header */}
-      <div className="">
-        <h2 className="text-4xl font-semibold tracking-tight">Upload your Letterboxd export</h2>
-        <p className="mt-2 text-sm text-primary/80">
-          Choose the Letterboxd .zip export and we&apos;ll handle the stats.
-        </p>
-      </div>
-
-      {/* Instructions */}
-      <div className="flex justify-between gap-6 items-center">
-        {INSTRUCTIONS.map((instruction, i) => (
-          <div
-            key={i}
-            className="
-              flex items-start gap-3
-              rounded-3xl
-              px-6 py-4
-              border border-border/30
-              bg-card/30
-              transition-all duration-300 ease-out
-              hover:-translate-y-1
-              hover:scale-[1.01]
-              hover:bg-tertiary/5
-              hover:border-tertiary/30
-            "
-          >
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-secondary/20 text-md font-semibold text-secondary">
-              {i + 1}
-            </div>
-
-            <p className="text-md text-secondary">{instruction}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Zip Upload */}
-      <label
-        htmlFor="letterboxd-upload"
-        className="group flex cursor-pointer flex-col items-center justify-center rounded-4xl border border-border/80 bg-foreground/80 p-8 text-center shadow-sm transition-all duration-300 ease-out hover:-translate-y-1 hover:scale-[1.01] hover:border-tertiary/50 hover:bg-tertiary/5 hover:shadow-xl dark:bg-card/90"
+    <section className="w-full space-y-5">
+      {/* Main import card */}
+      <div
+        onDragOver={(event) => {
+          event.preventDefault();
+          setIsDragging(true);
+        }}
+        onDragLeave={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node)) {
+            setIsDragging(false);
+          }
+        }}
+        onDrop={handleDrop}
+        className={`grid gap-5 border p-5 transition-colors duration-200 sm:p-6 ${
+          isDragging ? 'border-accent bg-surface-hover' : 'border-border bg-surface'
+        }`}
       >
-        <input
-          id="letterboxd-upload"
-          type="file"
-          accept=".zip,application/zip"
-          className="sr-only"
-          onChange={handleFileUpload}
-        />
+        {/* Index */}
+        <div className="hidden self-start pt-1 font-mono text-xs text-accent sm:block">01</div>
 
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-tertiary/10 text-sm font-semibold tracking-[0.2em] text-tertiary transition-all duration-300 group-hover:scale-110 group-hover:bg-tertiary/20">
-          ZIP
+        {/* Archive details */}
+        <div className="flex min-w-0 items-start gap-4">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center border border-border text-accent">
+            <ArchiveIcon size={20} />
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.18em] text-accent">
+              {loading
+                ? 'Processing archive'
+                : enriched
+                  ? 'Archive imported'
+                  : 'Your personal archive'}
+            </p>
+
+            <h2 className="text-base font-semibold tracking-tight sm:text-lg">
+              {loading
+                ? 'Unpacking your film history…'
+                : enriched
+                  ? 'Your archive is ready.'
+                  : 'Import your Letterboxd archive'}
+            </h2>
+
+            <p className="mt-1 break-words text-sm leading-6 text-muted">
+              {loading
+                ? fileName
+                : enriched
+                  ? `${enriched.length.toLocaleString()} films processed · ${fileName}`
+                  : 'Export your data from Letterboxd, then select the ZIP file to uncover your watching habits.'}
+            </p>
+          </div>
         </div>
 
-        <div className="mt-6 space-y-2">
-          <p className="text-lg font-semibold sm:text-xl">Drop your ZIP export here</p>
-          <p className="text-sm text-tertiary/80">or click to browse your files</p>
+        {/* File input and action */}
+        <div className="flex flex-col gap-2 sm:items-end">
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".zip,application/zip,application/x-zip-compressed"
+            aria-label="Choose Letterboxd ZIP archive"
+            className="sr-only"
+            disabled={loading}
+            onChange={handleFileChange}
+          />
+
+          <button
+            type="button"
+            disabled={loading}
+            onClick={() => inputRef.current?.click()}
+            className="inline-flex min-h-11 items-center justify-center gap-2 bg-accent px-5 py-3 text-sm font-medium text-background transition-opacity hover:opacity-85 disabled:cursor-wait disabled:opacity-60"
+          >
+            <UploadIcon />
+            {loading ? 'Processing…' : enriched ? 'Replace archive' : 'Choose .zip file'}
+          </button>
+
+          <span className="font-mono text-[10px] text-muted">ZIP FILE · PRIVATE BY DESIGN</span>
         </div>
-      </label>
+      </div>
+
+      {/* Drag-and-drop hint */}
+      {!loading && (
+        <p className="text-center text-xs text-muted">
+          Or drag and drop your ZIP file into the import card.
+        </p>
+      )}
 
       {/* Progress */}
       {loading && (
-        <div className="mt-8">
-          {loading && <p>Parsing and enriching…</p>}
-          {loading && (
-            <div className="mt-4 space-y-2">
-              <div className="h-2 overflow-hidden rounded-full bg-card">
-                <div
-                  className="h-full rounded-full bg-secondary transition-[width] duration-200 ease-out"
-                  style={{ width: `${progress}%` }}
-                />
-              </div>
-              <div className="flex items-center justify-between text-xs text-slate-500">
-                <span>{progress}% complete</span>
-                <span>{etaSeconds != null ? `About ${formatEta(etaSeconds)} left` : ''}</span>
-              </div>
+        <div
+          className="rounded-xl border border-border bg-surface p-4 sm:p-5"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="mb-3 flex items-center justify-between gap-4">
+            <span className="text-sm font-medium">Matching films with movie database records</span>
+            <span className="font-mono text-xs text-accent">{progress}%</span>
+          </div>
+
+          <div
+            className="h-1.5 overflow-hidden rounded-full bg-background"
+            role="progressbar"
+            aria-label="Archive processing progress"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={progress}
+          >
+            <div
+              className="h-full rounded-full bg-accent transition-[width] duration-200 ease-out"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+
+          <div className="mt-3 flex justify-between gap-3 font-mono text-[10px] text-muted">
+            <span>PLEASE KEEP THIS PAGE OPEN</span>
+            <span>{etaSeconds !== null ? formatEta(etaSeconds) : 'Calculating…'}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Success */}
+      {enriched && !loading && (
+        <div className="flex items-center gap-3 rounded-xl border border-border bg-surface p-4">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent/10 text-accent">
+            <svg
+              aria-hidden="true"
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="m5 12 4 4L19 6" />
+            </svg>
+          </div>
+
+          <div>
+            <p className="text-sm font-medium">Import complete</p>
+            <p className="mt-1 text-xs text-muted">
+              Your statistics have been updated with {enriched.length.toLocaleString()} films.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Error */}
+      {error && (
+        <div
+          className="rounded-lg border border-red-500/30 bg-red-500/5 p-4 text-sm text-red-500"
+          role="alert"
+        >
+          {error}
+        </div>
+      )}
+
+      {/* Minimal instructions */}
+      {!loading && (
+        <div className="grid gap-3 border-t border-border pt-4 sm:grid-cols-3">
+          {INSTRUCTIONS.map((instruction, index) => (
+            <div key={instruction} className="flex items-start gap-3">
+              <span className="font-mono text-[10px] text-accent">
+                {String(index + 1).padStart(2, '0')}
+              </span>
+              <p className="text-xs leading-5 text-muted">{instruction}</p>
             </div>
-          )}
-          {enriched && (
-            <div className="space-y-4">
-              <div className="rounded-3xl border border-border/70 bg-white/75 p-4 shadow-sm backdrop-blur">
-                <p className="text-sm text-muted">Imported entries</p>
-                <p className="text-2xl font-semibold">{enriched.length}</p>
-                <p className="mt-1 text-xs text-subtitle">
-                  {/* {enriched.filter((entry) => entry.tmdb).length} matched in TMDB */}
-                </p>
-              </div>
-            </div>
-          )}
+          ))}
         </div>
       )}
     </section>

@@ -1,48 +1,418 @@
 @import 'tailwindcss';
 
-:root {
-  --background: #0c0c16;
-  --foreground: #ffeaee;
+/* Default theme: Letterboxd-inspired */
+:root,
+[data-theme='letterboxd'] {
+  --background: #0d1117;
+  --surface: #1a222b;
+  --surface-hover: #222b36;
+  --text: #e8e8e8;
+  --muted: #8a93a2;
+  --border: #293542;
 
-  --secondary: #0081a7;
+  --accent: #00d084;
+  --accent-orange: #ff6b3d;
+  --accent-blue: #3da8ff;
 }
 
+/* Theme 2: Midnight cinema */
+[data-theme='midnight'] {
+  --background: #111318;
+  --surface: #1d222b;
+  --surface-hover: #292f39;
+  --text: #eae6df;
+  --muted: #777f8a;
+  --border: #343944;
+
+  --accent: #c5a572;
+  --accent-orange: #c5a572;
+  --accent-blue: #8a93a2;
+}
+
+/* Theme 3: Film negative */
+[data-theme='film-negative'] {
+  --background: #f4f0e8;
+  --surface: #ffffff;
+  --surface-hover: #eee9df;
+  --text: #252525;
+  --muted: #68645e;
+  --border: #d8d0c3;
+
+  --accent: #e45b43;
+  --accent-orange: #e45b43;
+  --accent-blue: #547eae;
+}
+
+/* Theme 4: Violet screening room */
+[data-theme='violet'] {
+  --background: #17131f;
+  --surface: #272033;
+  --surface-hover: #342a43;
+  --text: #f1eaf7;
+  --muted: #a49ab2;
+  --border: #40344f;
+
+  --accent: #b69ae8;
+  --accent-orange: #e6a06e;
+  --accent-blue: #83b8f2;
+}
+
+/* Tailwind CSS v4 theme integration */
 @theme inline {
   --color-background: var(--background);
-  --color-foreground: var(--foreground);
-
-  --color-card: var(--card);
+  --color-surface: var(--surface);
+  --color-surface-hover: var(--surface-hover);
+  --color-foreground: var(--text);
   --color-muted: var(--muted);
   --color-border: var(--border);
-  --color-primary: var(--primary);
-  --color-secondary: var(--secondary);
-  --color-tertiary: var(--tertiary);
-  --color-subtitle: var(--subtitle);
+  --color-accent: var(--accent);
+  --color-accent-orange: var(--accent-orange);
+  --color-accent-blue: var(--accent-blue);
+
+  /* Font mappings */
   --font-sans: var(--font-poppins);
+  --font-serif: Georgia, 'Times New Roman', serif;
+  --font-editorial: var(--font-editorial);
+  --font-mono: var(--font-jetbrains);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    /* Base */
-    --background: #0c0c16;
-    --foreground: #ffeaee;
+/* Global styles */
+body {
+  background: var(--background);
+  color: var(--text);
+  font-family: var(--font-poppins), sans-serif;
+}
 
-    /* Surfaces */
-    --card: #141b2a;
-    --muted: #d4c4ca;
-    --border: #202531;
+/* Collaborators section */
 
-    /* Brand / Accents */
-    --primary: #f15946; /* Letterboxd orange */
-    --secondary: #007f5f; /* Letterboxd blue */
-    --tertiary: #0081a7; /* Letterboxd green */
+.people-section {
+  width: 100%;
+}
 
-    --subtitle: #37404f;
+.people-section-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.people-section-header .eyebrow,
+.director-card .eyebrow {
+  margin: 0 0 0.55rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.people-section-title {
+  margin: 0;
+  color: var(--foreground);
+  font-family: var(--font-serif, Georgia, serif);
+  font-size: clamp(1.7rem, 3vw, 2.4rem);
+  font-weight: 500;
+  letter-spacing: -0.035em;
+}
+
+.text-button,
+.director-card-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.text-button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.people-year-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.year-chip {
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition:
+    color 160ms ease,
+    background 160ms ease,
+    border-color 160ms ease;
+}
+
+.year-chip:hover {
+  color: var(--foreground);
+  border-color: var(--accent);
+}
+
+.year-chip.active {
+  color: var(--background);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.people-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(250px, 0.85fr);
+  gap: 1.5rem;
+  align-items: stretch;
+}
+
+.people-list {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.person-row {
+  display: grid;
+  grid-template-columns: 2rem 3rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+  padding: 0.9rem 0.5rem;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--foreground);
+  text-align: left;
+  cursor: pointer;
+  transition: background 160ms ease;
+}
+
+.person-row:first-child {
+  border-top: 1px solid var(--border);
+}
+
+.person-row:hover {
+  background: var(--surface-hover);
+}
+
+.person-rank {
+  color: var(--muted);
+  font-family: var(--font-mono, monospace);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.person-avatar {
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--accent);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.person-avatar-image,
+.director-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.person-name {
+  min-width: 0;
+}
+
+.person-name h3 {
+  overflow: hidden;
+  margin: 0;
+  color: var(--foreground);
+  font-family: var(--font-serif, Georgia, serif);
+  font-size: 1rem;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.person-name p {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.person-count {
+  color: var(--foreground);
+  font-family: var(--font-mono, monospace);
+  font-size: 1rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Featured director card */
+
+.director-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  padding: 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--surface);
+}
+
+.director-monogram {
+  display: grid;
+  place-items: center;
+  width: 5.5rem;
+  height: 5.5rem;
+  margin-bottom: 1.5rem;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--surface-hover);
+  color: var(--accent);
+  font-family: var(--font-serif, Georgia, serif);
+  font-size: 1.5rem;
+}
+
+.director-card h3 {
+  margin: 0;
+  color: var(--foreground);
+  font-family: var(--font-serif, Georgia, serif);
+  font-size: clamp(1.35rem, 2vw, 1.75rem);
+  font-weight: 500;
+  letter-spacing: -0.025em;
+}
+
+.director-summary {
+  margin: 0.65rem 0 1.5rem;
+  color: var(--muted);
+  font-size: 0.83rem;
+  line-height: 1.6;
+}
+
+.rating-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.83rem;
+}
+
+.rating-line span {
+  color: var(--muted);
+}
+
+.rating-line strong {
+  color: var(--accent);
+  font-family: var(--font-mono, monospace);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.director-card-link {
+  justify-content: flex-start;
+  margin-top: auto;
+  padding-top: 1.5rem;
+}
+
+/* Loading, error and empty states */
+
+.people-status,
+.people-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  min-height: 150px;
+  padding: 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  color: var(--muted);
+  text-align: center;
+}
+
+.people-status p,
+.people-empty p {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.people-error {
+  color: var(--foreground);
+}
+
+.people-spinner {
+  width: 1.4rem;
+  height: 1.4rem;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: people-spin 0.7s linear infinite;
+}
+
+@keyframes people-spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-sans), sans-serif;
+@media (max-width: 720px) {
+  .people-section-header {
+    align-items: flex-start;
+  }
+
+  .people-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.5rem;
+  }
+
+  .director-card {
+    min-height: 250px;
+  }
+
+  .person-row {
+    grid-template-columns: 1.5rem 2.5rem minmax(0, 1fr) auto;
+    gap: 0.65rem;
+    padding: 0.8rem 0.25rem;
+  }
+
+  .person-avatar {
+    width: 2.5rem;
+    height: 2.5rem;
+  }
+
+  .people-section-header .text-button {
+    max-width: 45%;
+    text-align: right;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .people-spinner {
+    animation-duration: 1.5s;
+  }
+
+  .person-row,
+  .year-chip {
+    transition: none;
+  }
 }
